@@ -1,0 +1,46 @@
+name: airport_paths
+description: "Airport Paths - головоломка про прокладку безопасных маршрутов самолётов в аэропорту."
+publish_to: "none"
+version: 1.0.0+1
+
+environment:
+  sdk: ">=3.3.0 <4.0.0"
+
+dependencies:
+  flutter:
+    sdk: flutter
+
+  # Игровой движок (поле, самолёты, маршруты) - Этап 3+
+  flame: ^1.18.0
+
+  # Сохранение прогресса и настроек
+  shared_preferences: ^2.2.3
+
+  # Музыка и звуковые эффекты - Этап 6
+  audioplayers: ^6.1.0
+
+dev_dependencies:
+  flutter_test:
+    sdk: flutter
+  flutter_lints: ^4.0.0
+
+flutter:
+  uses-material-design: true
+
+  assets:
+    - assets/images/
+    - assets/images/ui/
+    - assets/images/planes/
+    - assets/images/tiles/
+    - assets/audio/sfx/
+    - assets/audio/music/
+    - assets/levels/
+
+  # Когда добавишь свой шрифт - раскомментируй и положи файлы в assets/fonts/
+  # fonts:
+  #   - family: AirportDisplay
+  #     fonts:
+  #       - asset: assets/fonts/AirportDisplay-Bold.ttf
+  #         weight: 700
+  #       - asset: assets/fonts/AirportDisplay-Black.ttf
+  #         weight: 900
