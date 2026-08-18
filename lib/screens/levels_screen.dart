@@ -13,6 +13,7 @@ import '../widgets/game_button.dart';
 import '../widgets/icon_plate_button.dart';
 import '../widgets/level_tile.dart';
 import '../widgets/page_dots.dart';
+import '../widgets/responsive_center.dart';
 import '../widgets/screen_header.dart';
 import '../widgets/stat_chip.dart';
 
@@ -175,7 +176,9 @@ class _LevelsPage extends StatelessWidget {
     final int count = last - first + 1;
     final int nextLevel = Services.progress.currentLevel;
 
-    return Padding(
+    return ResponsiveCenter(
+      maxWidth: 600,
+      child: Padding(
       padding: const EdgeInsets.symmetric(horizontal: 22, vertical: 6),
       child: GridView.builder(
         physics: const NeverScrollableScrollPhysics(),
@@ -203,6 +206,7 @@ class _LevelsPage extends StatelessWidget {
             ),
           );
         },
+      ),
       ),
     );
   }

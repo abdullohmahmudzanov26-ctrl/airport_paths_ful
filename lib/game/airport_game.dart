@@ -1,9 +1,12 @@
 import 'dart:ui';
 
+import 'package:flame/components.dart';
 import 'package:flame/game.dart';
 import 'package:flutter/foundation.dart';
 
+import '../models/board_theme.dart';
 import '../models/level_data.dart';
+import '../models/plane_skin.dart';
 import '../services/audio_service.dart';
 import '../services/service_locator.dart';
 import 'board_layout.dart';
@@ -11,6 +14,7 @@ import 'components/airport_map_component.dart';
 import 'components/plane_component.dart';
 import 'components/route_layer_component.dart';
 import 'components/tutorial_layer_component.dart';
+import 'components/weather_layer_component.dart';
 import 'systems/collision_system.dart';
 import 'systems/route_controller.dart';
 
@@ -60,9 +64,21 @@ class HudState {
 /// Всё меню, панели и оверлеи остаются обычными виджетами Flutter,
 /// поэтому интерфейс не пересчитывается каждый кадр.
 class AirportGame extends FlameGame {
-  AirportGame({required this.level, this.onLevelComplete, this.onCrash});
+  AirportGame({
+    required this.level,
+    required this.theme,
+    required this.skin,
+    this.onLevelComplete,
+    this.onCrash,
+  });
 
   final LevelData level;
+
+  /// Палитра поля: куплена в магазине и выбрана игроком.
+  final BoardTheme theme;
+
+  /// Силуэт бортов - тоже из магазина.
+  final PlaneSkin skin;
 
   /// Уровень пройден: ходы и секунды. Звёзды и награду считает экран -
   /// игра не должна знать про сохранения и монеты.
@@ -108,6 +124,30 @@ class AirportGame extends FlameGame {
   double _launchCountdown = launchDelay;
   bool usedHint = false;
 
+  /// Праздничная анимация после посадки: самолёты дожимаются на
+  /// стоянку, маршруты и огни подсвечиваются, и только потом наружу
+  /// уходит onLevelComplete. Звёзды это не портит: elapsed не растёт
+  /// нигде, кроме фазы drawing, значит время и ходы уже зафиксированы
+  /// в момент посадки - дальше можно ждать сколько угодно.
+  static const double celebrationDuration = 1.3;
+  double _celebration = 0;
+  bool _completionReported = false;
+
+  /// 0..1: насколько далеко зашла праздничная анимация. Используется
+  /// слоем маршрутов, чтобы разгораться постепенно, а не рывком.
+  double get celebrationProgress => phase == GamePhase.won
+      ? (_celebration / celebrationDuration).clamp(0.0, 1.0)
+      : 0.0;
+
+  /// Три флага Perfect Run. Пишутся в тех же точках, где уже жили
+  /// звук и вибрация ошибки/отмены/подсказки - новой логики
+  /// обнаружения не потребовалось, только фиксация факта.
+  bool hadMistake = false;
+  bool usedUndo = false;
+
+  /// Уровень пройден без единой ошибки, без отмены и без подсказки.
+  bool get isPerfectRun => !hadMistake && !usedUndo && !usedHint;
+
   int get elapsedSeconds => _elapsed.floor();
 
   /// Фон рисует Flutter (AirportBackdrop), сцена поверх - прозрачная.
@@ -126,6 +166,12 @@ class AirportGame extends FlameGame {
       final PlaneComponent plane = PlaneComponent(game: this, spec: spec);
       planes.add(plane);
       await add(plane);
+    }
+
+    // Чисто декоративный слой поверх сцены - есть только у тем,
+    // чья погода задана (см. BoardTheme.weather).
+    if (theme.weather != WeatherKind.none) {
+      await add(WeatherLayerComponent(this));
     }
 
     _syncHud();
@@ -165,11 +211,25 @@ class AirportGame extends FlameGame {
         break;
 
       case GamePhase.won:
+        _updateCelebration(dt);
+        break;
+
       case GamePhase.crashed:
         break;
     }
 
     _syncHud();
+  }
+
+  void _updateCelebration(double dt) {
+    _celebration += dt;
+    for (final PlaneComponent plane in planes) {
+      plane.advanceCelebration(dt);
+    }
+    if (!_completionReported && _celebration >= celebrationDuration) {
+      _completionReported = true;
+      onLevelComplete?.call(routes.moves, elapsedSeconds);
+    }
   }
 
   void _startRun() {
@@ -207,7 +267,9 @@ class AirportGame extends FlameGame {
       phase = GamePhase.won;
       Services.audio.play(Sfx.win);
       Services.haptics.success();
-      onLevelComplete?.call(routes.moves, elapsedSeconds);
+      // onLevelComplete уходит из _updateCelebration после того, как
+      // отыграет праздничная анимация - см. celebrationDuration.
+      // moves/elapsedSeconds уже не изменятся к тому моменту.
     }
   }
 
@@ -234,7 +296,10 @@ class AirportGame extends FlameGame {
     if (pos == null) return;
 
     final bool changed = routes.dragTo(pos);
-    if (!changed && _isBlocked(pos)) _blockedFeedback();
+    if (!changed && _isBlocked(pos)) {
+      hadMistake = true;
+      _blockedFeedback();
+    }
     _afterInput();
   }
 
@@ -273,6 +338,7 @@ class AirportGame extends FlameGame {
 
   void undo() {
     if (!routes.canUndo) return;
+    usedUndo = true;
     routes.undo();
     _completedShown = routes.completedCount;
     Services.audio.play(Sfx.back);
@@ -309,6 +375,10 @@ class AirportGame extends FlameGame {
     _lastBlockedFeedback = -1;
     _launchCountdown = launchDelay;
     usedHint = false;
+    hadMistake = false;
+    usedUndo = false;
+    _celebration = 0;
+    _completionReported = false;
     _syncHud();
   }
 

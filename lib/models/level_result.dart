@@ -9,6 +9,7 @@ class LevelResult {
     required this.coins,
     required this.isNewBest,
     required this.usedHint,
+    required this.perfect,
   });
 
   final int levelId;
@@ -18,6 +19,10 @@ class LevelResult {
   final int coins;
   final bool isNewBest;
   final bool usedHint;
+
+  /// Perfect Run: ни одной ошибки при рисовании, ни одной отмены,
+  /// подсказка не использовалась.
+  final bool perfect;
 
   String get formattedTime {
     final int m = seconds ~/ 60;

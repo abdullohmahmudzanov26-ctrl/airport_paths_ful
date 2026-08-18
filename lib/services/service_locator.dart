@@ -1,3 +1,4 @@
+import 'ad_service.dart';
 import 'audio_service.dart';
 import 'haptic_service.dart';
 import 'progress_service.dart';
@@ -14,6 +15,7 @@ class Services {
   static final AudioService audio = AudioService(settings);
   static final HapticService haptics = HapticService(settings);
   static final ProgressService progress = ProgressService(storage);
+  static final AdService ads = AdService(storage);
 
   static bool _initialized = false;
 
@@ -24,6 +26,7 @@ class Services {
     await storage.init();
     await settings.load();
     await progress.load();
+    await ads.load();
     await audio.init();
     _initialized = true;
   }

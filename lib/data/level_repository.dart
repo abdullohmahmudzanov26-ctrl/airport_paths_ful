@@ -1,4 +1,5 @@
 import '../models/level_data.dart';
+import 'daily_flight.dart';
 import 'level_generator.dart';
 
 /// Доступ к уровням. Карты строятся лениво и кэшируются:
@@ -7,7 +8,15 @@ import 'level_generator.dart';
 class LevelRepository {
   const LevelRepository._();
 
-  static const int levelCount = 150;
+  static const int levelCount = 200;
+
+  /// С этого уровня начинается орбитальная зона: другая тема,
+  /// самые плотные карты в игре.
+  static const int orbitalFrom = 101;
+
+  /// С этого уровня начинается EVENT-зона: отдельная локация,
+  /// самые плотные карты и до 13 бортов одновременно.
+  static const int eventFrom = 151;
   static const int levelsPerPage = 16;
 
   static final Map<int, LevelData> _cache = <int, LevelData>{};
@@ -29,5 +38,17 @@ class LevelRepository {
     }
   }
 
-  static void clearCache() => _cache.clear();
+  static final Map<int, LevelData> _dailyCache = <int, LevelData>{};
+
+  /// Карта рейса дня. Кэш по дате, чтобы не строить её заново
+  /// при каждом открытии меню.
+  static LevelData daily(DateTime date) {
+    final int key = DailyFlight.keyFor(date);
+    return _dailyCache.putIfAbsent(key, () => DailyFlight.levelFor(date));
+  }
+
+  static void clearCache() {
+    _cache.clear();
+    _dailyCache.clear();
+  }
 }

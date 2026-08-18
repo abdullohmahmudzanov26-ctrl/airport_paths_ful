@@ -79,6 +79,8 @@ class SettingsSliderRow extends StatelessWidget {
             flex: 5,
             child: Text(
               label,
+              maxLines: 2,
+              overflow: TextOverflow.ellipsis,
               style: AppText.caption.copyWith(color: p.textSecondary),
             ),
           ),

@@ -13,6 +13,7 @@ import 'app_panel.dart';
 import 'game_button.dart';
 import 'icon_plate_button.dart';
 import 'ribbon_banner.dart';
+import 'stat_chip.dart';
 
 /// Экран победы: лента, звёзды по одной, время, ходы и награда.
 class WinOverlay extends StatefulWidget {
@@ -95,12 +96,25 @@ class _WinOverlayState extends State<WinOverlay>
                     mainAxisSize: MainAxisSize.min,
                     children: <Widget>[
                       _Stars(controller: _stars, earned: r.stars),
+                      // Тот же StatChip, что уже используют монеты
+                      // и подсказки в шапке - новый виджет не нужен.
+                      if (r.perfect) ...<Widget>[
+                        const SizedBox(height: 8),
+                        StatChip(
+                          icon: Icons.verified_rounded,
+                          value: tr('perfect_run'),
+                          iconColor: p.success.top,
+                        ),
+                      ],
                       const SizedBox(height: 18),
-                      Row(
-                        mainAxisAlignment: MainAxisAlignment.center,
+                      // Wrap, а не Row: на испанском MOVIMIENTOS длинное
+                      // и пара метрик спокойно переносится на две строки.
+                      Wrap(
+                        alignment: WrapAlignment.center,
+                        spacing: 22,
+                        runSpacing: 6,
                         children: <Widget>[
                           _Metric(label: tr('time'), value: r.formattedTime),
-                          const SizedBox(width: 26),
                           _Metric(label: tr('moves'), value: '${r.moves}'),
                         ],
                       ),
@@ -112,23 +126,35 @@ class _WinOverlayState extends State<WinOverlay>
                         ),
                       ],
                       const SizedBox(height: 14),
-                      Row(
-                        mainAxisAlignment: MainAxisAlignment.center,
-                        children: <Widget>[
-                          Text(
-                            '${tr('reward')}:',
-                            style: AppText.label.copyWith(color: p.textMuted),
-                          ),
-                          const SizedBox(width: 10),
-                          Text(
-                            '${r.coins}',
-                            style: AppText.value.copyWith(color: p.textPrimary),
-                          ),
-                          const SizedBox(width: 6),
-                          Icon(Icons.monetization_on_rounded,
-                              size: 20, color: p.coin),
-                        ],
-                      ),
+                      // Монеты платятся один раз за уровень. При повторном
+                      // прохождении r.coins == 0 — показывать «награда: 0»
+                      // выглядело бы как баг, поэтому вместо суммы короткая
+                      // подпись без цифр и без иконки монеты.
+                      if (r.coins > 0)
+                        Row(
+                          mainAxisAlignment: MainAxisAlignment.center,
+                          children: <Widget>[
+                            Text(
+                              '${tr('reward')}:',
+                              style:
+                                  AppText.label.copyWith(color: p.textMuted),
+                            ),
+                            const SizedBox(width: 10),
+                            Text(
+                              '${r.coins}',
+                              style:
+                                  AppText.value.copyWith(color: p.textPrimary),
+                            ),
+                            const SizedBox(width: 6),
+                            Icon(Icons.monetization_on_rounded,
+                                size: 20, color: p.coin),
+                          ],
+                        )
+                      else
+                        Text(
+                          tr('reward_claimed'),
+                          style: AppText.caption.copyWith(color: p.textMuted),
+                        ),
                       if (widget.freshAchievements.isNotEmpty) ...<Widget>[
                         const SizedBox(height: 14),
                         for (final Achievement a in widget.freshAchievements)

@@ -1,3 +1,5 @@
+import 'dart:ui' show PlatformDispatcher;
+
 import 'package:flutter/foundation.dart';
 
 import '../data/app_strings.dart';
@@ -12,7 +14,18 @@ class SettingsService extends ValueNotifier<GameSettings> {
   final StorageService _storage;
 
   Future<void> load() async {
-    value = GameSettings.decode(_storage.getString(StorageKeys.settings));
+    final String? saved = _storage.getString(StorageKeys.settings);
+
+    if (saved == null || saved.isEmpty) {
+      // Первый запуск: подхватываем язык телефона, если он поддержан.
+      final String device = AppStrings.resolveDeviceLanguage(
+        PlatformDispatcher.instance.locale.languageCode,
+      );
+      value = GameSettings.defaults.copyWith(languageCode: device);
+    } else {
+      value = GameSettings.decode(saved);
+    }
+
     AppStrings.language = value.languageCode;
   }
 

@@ -3,6 +3,7 @@ import 'dart:ui';
 
 import 'package:flame/components.dart';
 
+import '../../models/board_theme.dart';
 import '../../models/level_data.dart';
 import '../../theme/app_palette.dart';
 import '../airport_game.dart';
@@ -50,6 +51,14 @@ class RouteLayerComponent extends Component {
     ..style = PaintingStyle.stroke
     ..color = const Color(0xCCFFFFFF);
 
+  // Праздничная подсветка после победы: тот же кэшированный Path
+  // маршрута, просто ещё одна обводка и несколько огоньков поверх.
+  final Paint _celebrateGlowPaint = Paint()
+    ..style = PaintingStyle.stroke
+    ..strokeCap = StrokeCap.round
+    ..strokeJoin = StrokeJoin.round;
+  final Paint _lightPaint = Paint();
+
   double _time = 0;
 
   @override
@@ -70,6 +79,11 @@ class RouteLayerComponent extends Component {
     _pulsePaint.strokeWidth = cell * 0.05;
     _lockRingPaint.strokeWidth = cell * 0.045;
 
+    // Дымка глушит праздничный свет - в тумане яркие огни неуместны.
+    final double celebrate = game.theme.weather == WeatherKind.fog
+        ? game.celebrationProgress * 0.7
+        : game.celebrationProgress;
+
     for (final PlaneSpec spec in game.level.planes) {
       final List<GridPos> route = game.routes.routeOf(spec.id);
       final Color color =
@@ -83,12 +97,13 @@ class RouteLayerComponent extends Component {
           route,
           color,
           active: game.routes.activePlane == spec.id,
+          celebrate: celebrate,
         );
       }
 
       // Пока стоянка не подключена - она мягко пульсирует.
       if (game.routes.isComplete(spec.id)) {
-        _paintGateLocked(canvas, layout.center(spec.gate), color, cell);
+        _paintGateLocked(canvas, layout.center(spec.gate), color, cell, celebrate);
       } else {
         _paintGatePulse(canvas, layout.center(spec.gate), color, cell);
       }
@@ -102,6 +117,7 @@ class RouteLayerComponent extends Component {
     List<GridPos> route,
     Color color, {
     required bool active,
+    double celebrate = 0,
   }) {
     final double cell = layout.cell;
     final Path path = _pathFor(planeId, layout, route);
@@ -121,8 +137,38 @@ class RouteLayerComponent extends Component {
     _glossPaint.color = Color.fromARGB(active ? 90 : 55, 255, 255, 255);
     canvas.drawPath(path, _glossPaint);
 
+    if (celebrate > 0) {
+      // Разгорающийся контур поверх того же кэшированного Path -
+      // ни новой геометрии, ни новых Paint на кадр.
+      _celebrateGlowPaint
+        ..color = color.withOpacity(0.32 * celebrate)
+        ..strokeWidth = cell * (0.42 + 0.20 * celebrate);
+      canvas.drawPath(path, _celebrateGlowPaint);
+      _paintRunwayLights(canvas, layout, route, color, celebrate);
+    }
+
     _dotPaint.color = _shade(color, 0.75);
     canvas.drawCircle(layout.center(route.first), cell * 0.17, _dotPaint);
+  }
+
+  /// Бегущие огоньки вдоль уже пройденного маршрута - "огни
+  /// аэродрома" зажигаются по мере праздничной анимации. Точки берутся
+  /// из того же List<GridPos>, что и сам маршрут - ничего не выделяем.
+  void _paintRunwayLights(
+    Canvas canvas,
+    BoardLayout layout,
+    List<GridPos> route,
+    Color color,
+    double celebrate,
+  ) {
+    final double cell = layout.cell;
+    final int step = math.max(1, route.length ~/ 6);
+    for (int i = 0; i < route.length; i += step) {
+      final double wave = (math.sin(_time * 2.6 - i * 0.6) + 1) / 2;
+      final double alpha = (celebrate * (0.30 + 0.55 * wave)).clamp(0.0, 1.0);
+      _lightPaint.color = color.withOpacity(alpha);
+      canvas.drawCircle(layout.center(route[i]), cell * 0.08, _lightPaint);
+    }
   }
 
   Path _pathFor(int planeId, BoardLayout layout, List<GridPos> route) {
@@ -153,10 +199,28 @@ class RouteLayerComponent extends Component {
     canvas.drawCircle(center, cell * (0.30 + 0.06 * wave), _pulsePaint);
   }
 
-  void _paintGateLocked(Canvas canvas, Offset center, Color color, double cell) {
+  void _paintGateLocked(
+    Canvas canvas,
+    Offset center,
+    Color color,
+    double cell, [
+    double celebrate = 0,
+  ]) {
     _lockPaint.color = color;
     canvas.drawCircle(center, cell * 0.15, _lockPaint);
     canvas.drawCircle(center, cell * 0.15, _lockRingPaint);
+
+    if (celebrate > 0) {
+      // Стоянка "загорается" ярче по мере того, как борт дожимается.
+      final double wave = (math.sin(_time * 4.0) + 1) / 2;
+      _pulsePaint.color =
+          color.withOpacity(0.28 * celebrate * (0.5 + 0.5 * wave));
+      canvas.drawCircle(
+        center,
+        cell * (0.20 + 0.10 * celebrate * wave),
+        _pulsePaint,
+      );
+    }
   }
 
   static Color _shade(Color c, double factor) => Color.fromARGB(

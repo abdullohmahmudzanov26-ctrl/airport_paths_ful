@@ -4,16 +4,23 @@ import 'package:flutter/foundation.dart';
 import '../models/game_settings.dart';
 import 'settings_service.dart';
 
-/// Звуковые эффекты игры. Файлы кладутся в assets/audio/sfx/.
+/// Звуковые эффекты игры.
+///
+/// ВАЖНО про пути: AssetSource из audioplayers сам добавляет префикс
+/// `assets/`, поэтому здесь путь пишется БЕЗ него, но С папкой audio.
+/// Строка 'audio/sfx/click.wav' превращается в assets/audio/sfx/click.wav.
 enum Sfx {
-  click('sfx/click.mp3'),
-  back('sfx/back.mp3'),
-  error('sfx/error.mp3'),
-  draw('sfx/draw.mp3'),
-  star('sfx/star.mp3'),
-  win('sfx/win.mp3'),
-  unlock('sfx/unlock.mp3'),
-  takeoff('sfx/takeoff.mp3');
+  // Короткие звуки лежат в WAV: mp3-кодер добавляет в начало
+  // паузу в пару десятков миллисекунд, и клик начинает опаздывать.
+  click('audio/sfx/click.wav'),
+  back('audio/sfx/back.wav'),
+  error('audio/sfx/error.wav'),
+  draw('audio/sfx/draw.wav'),
+  // Длинные - в mp3, там задержка не слышна, а вес втрое меньше.
+  star('audio/sfx/star.mp3'),
+  win('audio/sfx/win.mp3'),
+  unlock('audio/sfx/unlock.mp3'),
+  takeoff('audio/sfx/takeoff.mp3');
 
   const Sfx(this.asset);
 
@@ -22,8 +29,8 @@ enum Sfx {
 
 /// Музыкальные темы. Файлы кладутся в assets/audio/music/.
 enum MusicTrack {
-  menu('music/menu.mp3'),
-  game('music/game.mp3');
+  menu('audio/music/menu.mp3'),
+  game('audio/music/game.mp3');
 
   const MusicTrack(this.asset);
 
@@ -115,7 +122,11 @@ class AudioService {
       await player.stop();
       await player.setVolume(_s.soundVolume);
       await player.play(AssetSource(sfx.asset));
-    } catch (_) {/* ассет отсутствует - молчим */}
+    } catch (e) {
+      // Раньше здесь стояло молчаливое подавление, из-за чего неверный
+      // путь к ассету выглядел как «звук просто не работает».
+      debugPrint('AudioService: не удалось проиграть ${sfx.asset} ($e)');
+    }
   }
 
   Future<void> dispose() async {

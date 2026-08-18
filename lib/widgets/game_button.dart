@@ -208,13 +208,17 @@ class _ButtonFace extends StatelessWidget {
                   Icon(icon, size: (style.fontSize ?? 16) + 5, color: iconColor),
                   const SizedBox(width: 10),
                 ],
+                // Испанские надписи заметно длиннее английских,
+                // поэтому текст ужимается по ширине, а не обрезается.
                 Flexible(
-                  child: Text(
-                    label,
-                    maxLines: 1,
-                    overflow: TextOverflow.ellipsis,
-                    textAlign: TextAlign.center,
-                    style: style,
+                  child: FittedBox(
+                    fit: BoxFit.scaleDown,
+                    child: Text(
+                      label,
+                      maxLines: 1,
+                      textAlign: TextAlign.center,
+                      style: style,
+                    ),
                   ),
                 ),
               ],

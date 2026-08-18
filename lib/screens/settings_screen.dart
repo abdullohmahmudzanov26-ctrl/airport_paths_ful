@@ -1,6 +1,5 @@
 import 'package:flutter/material.dart';
 
-import '../app/routes.dart';
 import '../data/app_strings.dart';
 import '../models/game_settings.dart';
 import '../services/audio_service.dart';
@@ -10,6 +9,7 @@ import '../theme/app_text_styles.dart';
 import '../widgets/airport_backdrop.dart';
 import '../widgets/app_panel.dart';
 import '../widgets/game_button.dart';
+import '../widgets/responsive_center.dart';
 import '../widgets/screen_header.dart';
 import '../widgets/settings_rows.dart';
 
@@ -81,7 +81,8 @@ class SettingsScreen extends StatelessWidget {
                   Expanded(
                     child: SingleChildScrollView(
                       padding: const EdgeInsets.fromLTRB(18, 6, 18, 24),
-                      child: Column(
+                      child: ResponsiveCenter(
+                        child: Column(
                         children: <Widget>[
                           AppPanel(
                             padding: const EdgeInsets.fromLTRB(16, 14, 16, 14),
@@ -144,7 +145,7 @@ class SettingsScreen extends StatelessWidget {
                                   icon: Icons.language_rounded,
                                   label: tr('language'),
                                   onTap: () => Services.settings.setLanguage(
-                                    s.languageCode == 'es' ? 'en' : 'es',
+                                    s.languageCode == 'en' ? 'es' : 'en',
                                   ),
                                   trailing: Row(
                                     mainAxisSize: MainAxisSize.min,
@@ -163,18 +164,6 @@ class SettingsScreen extends StatelessWidget {
                                     ],
                                   ),
                                 ),
-                                const SettingsDivider(),
-                                SettingsActionRow(
-                                  icon: Icons.info_outline_rounded,
-                                  label: tr('about'),
-                                  onTap: () => Navigator.of(context)
-                                      .pushNamed(Routes.about),
-                                  trailing: Icon(
-                                    Icons.keyboard_arrow_right_rounded,
-                                    size: 22,
-                                    color: p.textMuted,
-                                  ),
-                                ),
                               ],
                             ),
                           ),
@@ -188,6 +177,7 @@ class SettingsScreen extends StatelessWidget {
                             onPressed: () => _confirmReset(context),
                           ),
                         ],
+                      ),
                       ),
                     ),
                   ),

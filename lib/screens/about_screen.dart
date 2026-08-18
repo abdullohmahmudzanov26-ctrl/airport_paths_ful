@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 
+import '../app/routes.dart';
 import '../data/app_strings.dart';
 import '../theme/app_palette.dart';
 import '../theme/app_text_styles.dart';
@@ -55,7 +56,8 @@ class AboutScreen extends StatelessWidget {
                       width: 300,
                       height: 48,
                       textStyle: AppText.buttonSmall,
-                      onPressed: () {},
+                      onPressed: () => Navigator.of(context)
+                          .pushNamed(Routes.privacy),
                     ),
                     const SizedBox(height: 12),
                     GameButton(
@@ -63,7 +65,8 @@ class AboutScreen extends StatelessWidget {
                       width: 300,
                       height: 48,
                       textStyle: AppText.buttonSmall,
-                      onPressed: () {},
+                      onPressed: () => Navigator.of(context)
+                          .pushNamed(Routes.terms),
                     ),
                   ],
                 ),

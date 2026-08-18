@@ -70,6 +70,13 @@ class AchievementsCatalog {
       icon: Icons.savings_rounded,
       test: _rich,
     ),
+    Achievement(
+      id: 'flawless',
+      titleKey: 'ach_flawless_title',
+      descriptionKey: 'ach_flawless_desc',
+      icon: Icons.verified_rounded,
+      test: _flawless,
+    ),
   ];
 
   static Achievement? byId(String id) {
@@ -85,15 +92,17 @@ class AchievementsCatalog {
 
   static bool _dispatcher(AchievementStats s) => s.completedLevels >= 15;
 
-  static bool _captain(AchievementStats s) => s.completedLevels >= 30;
+  static bool _captain(AchievementStats s) => s.completedLevels >= 60;
 
-  static bool _ace(AchievementStats s) => s.completedLevels >= 50;
+  static bool _ace(AchievementStats s) => s.completedLevels >= 200;
 
   static bool _perfectionist(AchievementStats s) => s.perfectLevels >= 10;
 
-  static bool _starCollector(AchievementStats s) => s.totalStars >= 60;
+  static bool _starCollector(AchievementStats s) => s.totalStars >= 300;
 
   static bool _selfMade(AchievementStats s) => s.hintFreePerfects >= 10;
 
   static bool _rich(AchievementStats s) => s.coins >= 1000;
+
+  static bool _flawless(AchievementStats s) => s.perfectRuns >= 5;
 }

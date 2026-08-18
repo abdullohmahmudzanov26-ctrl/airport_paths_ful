@@ -2,10 +2,12 @@ import 'package:flutter/material.dart';
 
 import '../screens/about_screen.dart';
 import '../screens/achievements_screen.dart';
-import '../screens/airport_screen.dart';
 import '../screens/game_screen.dart';
+import '../screens/legal_document_screen.dart';
 import '../screens/levels_screen.dart';
 import '../screens/main_menu_screen.dart';
+import '../screens/my_airport_screen.dart';
+import '../screens/shop_screen.dart';
 import '../screens/settings_screen.dart';
 import '../screens/splash_screen.dart';
 
@@ -19,14 +21,20 @@ class Routes {
   static const String settings = '/settings';
   static const String about = '/about';
   static const String achievements = '/achievements';
-  static const String airport = '/airport';
+  static const String shop = '/shop';
+  static const String myAirport = '/my-airport';
+  static const String privacy = '/privacy';
+  static const String terms = '/terms';
 }
 
 /// Аргументы игрового экрана.
 class GameArgs {
-  const GameArgs({required this.levelId});
+  const GameArgs({required this.levelId, this.isDaily = false});
 
   final int levelId;
+
+  /// Рейс дня: карта берётся из даты, прогресс уровней не трогается.
+  final bool isDaily;
 }
 
 class AppRouter {
@@ -46,12 +54,28 @@ class AppRouter {
         return _scale(const AboutScreen(), settings);
       case Routes.achievements:
         return _scale(const AchievementsScreen(), settings);
-      case Routes.airport:
-        return _scale(const AirportScreen(), settings);
+      case Routes.shop:
+        return _scale(const ShopScreen(), settings);
+      case Routes.myAirport:
+        return _scale(const MyAirportScreen(), settings);
+      case Routes.privacy:
+        return _scale(
+          const LegalDocumentScreen(kind: LegalDocKind.privacy),
+          settings,
+        );
+      case Routes.terms:
+        return _scale(
+          const LegalDocumentScreen(kind: LegalDocKind.terms),
+          settings,
+        );
       case Routes.game:
         final Object? args = settings.arguments;
         final int levelId = args is GameArgs ? args.levelId : 1;
-        return _fade(GameScreen(levelId: levelId), settings);
+        final bool isDaily = args is GameArgs && args.isDaily;
+        return _fade(
+          GameScreen(levelId: levelId, isDaily: isDaily),
+          settings,
+        );
       default:
         return _fade(const MainMenuScreen(), settings);
     }

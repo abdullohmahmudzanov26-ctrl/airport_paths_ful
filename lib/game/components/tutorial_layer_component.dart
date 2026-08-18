@@ -45,7 +45,8 @@ class TutorialLayerComponent extends Component {
 
     final double total = (path.length - 1).toDouble();
     final double cycle = total / handSpeed + pauseSeconds;
-    final double head = math.min((_time % cycle) * handSpeed, total);
+    final double head =
+        math.min((_time % cycle) * handSpeed, total);
 
     // След: точки загораются по мере приближения «пальца».
     final Paint dot = Paint();
@@ -54,7 +55,7 @@ class TutorialLayerComponent extends Component {
       if (d < -0.6) continue;
       final double alpha = (1.0 - (d / 3.2)).clamp(0.0, 1.0);
       if (alpha <= 0.02) continue;
-      dot.color = color.withValues(alpha: 0.55 * alpha);
+      dot.color = color.withOpacity(0.55 * alpha);
       canvas.drawCircle(layout.center(path[i]), cell * 0.11, dot);
     }
 
@@ -66,7 +67,7 @@ class TutorialLayerComponent extends Component {
       Paint()
         ..style = PaintingStyle.stroke
         ..strokeWidth = cell * 0.06
-        ..color = color.withValues(alpha: 0.35 + 0.4 * wave),
+        ..color = color.withOpacity(0.35 + 0.4 * wave),
     );
 
     // «Палец».

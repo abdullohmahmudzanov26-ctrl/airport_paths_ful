@@ -26,6 +26,7 @@ class AchievementStats {
     required this.perfectLevels,
     required this.coins,
     required this.hintFreePerfects,
+    required this.perfectRuns,
   });
 
   final int completedLevels;
@@ -33,4 +34,9 @@ class AchievementStats {
   final int perfectLevels;
   final int coins;
   final int hintFreePerfects;
+
+  /// Уровни, пройденные без единой ошибки, без отмены и без
+  /// подсказки - Perfect Run. Отдельная метрика от perfectLevels
+  /// (той нужны только 3 звезды, тут дисциплина прокладки маршрута).
+  final int perfectRuns;
 }

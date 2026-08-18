@@ -40,171 +40,138 @@ class _Difficulty {
 class LevelGenerator {
   const LevelGenerator._();
 
-  static LevelData generate(int levelId) {
-    for (int attempt = 0; attempt < 14; attempt++) {
-      final LevelData? level = _tryGenerate(levelId, attempt);
+  static LevelData generate(int levelId) =>
+      generateFor(id: levelId, difficultyLevel: levelId, seed: levelId);
+
+  /// Общий вход: id идёт в оформление карты, difficultyLevel задаёт
+  /// параметры сложности, seed - саму раскладку. У обычных уровней все
+  /// три совпадают, у рейса дня id и seed берутся из даты.
+  static LevelData generateFor({
+    required int id,
+    required int difficultyLevel,
+    required int seed,
+  }) {
+    for (int attempt = 0; attempt < 16; attempt++) {
+      final LevelData? level =
+          _tryGenerate(id, difficultyLevel, seed, attempt);
       if (level != null) return level;
     }
-    return _fallback(levelId);
+    return _fallback(id);
   }
 
   // --------------------------------------------------------------- сложность
 
   static _Difficulty _difficultyFor(int id) {
-    // 1-5 - знакомство: просторно, много запасных клеток, ошибиться сложно.
+    // 1-3 - знакомство. Дальше игра сразу берёт всерьёз:
+    // на четвёртом уровне плотность поля прыгает вдвое.
     if (id <= 3) {
       return _Difficulty(
-        cols: 5,
-        rows: 7,
-        planes: id <= 2 ? 1 : 2,
-        obstacles: 2 + id,
-        minPath: 4,
-        maxPath: 8,
-        fill: 0,
+        cols: 5, rows: 7, planes: id <= 2 ? 1 : 2,
+        obstacles: 2 + id, minPath: 4, maxPath: 8, fill: 0,
       );
     }
-    if (id <= 5) {
-      return const _Difficulty(
-        cols: 6,
-        rows: 8,
-        planes: 2,
-        obstacles: 4,
-        minPath: 4,
-        maxPath: 9,
-        fill: 0.20,
-      );
-    }
-    // С 6-го поле начинает поджиматься: свободного места всё меньше.
     if (id <= 10) {
       return _Difficulty(
-        cols: 6,
-        rows: 9,
-        planes: 3,
-        obstacles: 4 + (id - 6),
-        minPath: 5,
-        maxPath: 11,
-        fill: 0.45,
+        cols: 6, rows: 9, planes: 3,
+        obstacles: 4 + (id - 4) ~/ 2, minPath: 5, maxPath: 11, fill: 0.55,
       );
     }
-    if (id <= 20) {
+    if (id <= 25) {
       return _Difficulty(
-        cols: 7,
-        rows: 10,
-        planes: id <= 15 ? 3 : 4,
-        obstacles: 6 + (id - 11) ~/ 2,
-        minPath: 6,
-        maxPath: 13,
-        fill: 0.60,
+        cols: 7, rows: 10, planes: id <= 17 ? 3 : 4,
+        obstacles: 6 + (id - 11) ~/ 3, minPath: 6, maxPath: 13, fill: 0.70,
       );
     }
-    if (id <= 30) {
+    if (id <= 45) {
       return _Difficulty(
-        cols: 7,
-        rows: 11,
-        planes: id <= 25 ? 4 : 5,
-        obstacles: 6 + (id - 21) ~/ 2,
-        minPath: 6,
-        maxPath: 14,
-        fill: 0.70,
+        cols: 7, rows: 11, planes: id <= 35 ? 4 : 5,
+        obstacles: 6 + (id - 26) ~/ 4, minPath: 6, maxPath: 14, fill: 0.78,
       );
     }
-    if (id <= 40) {
+    if (id <= 70) {
       return _Difficulty(
-        cols: 8,
-        rows: 12,
-        planes: id <= 35 ? 5 : 6,
-        obstacles: 7 + (id - 31) ~/ 2,
-        minPath: 7,
-        maxPath: 16,
-        fill: 0.78,
+        cols: 8, rows: 12, planes: id <= 58 ? 5 : 6,
+        obstacles: 7 + (id - 46) ~/ 5, minPath: 7, maxPath: 16, fill: 0.84,
       );
     }
-    if (id <= 50) {
-      return _Difficulty(
-        cols: 8,
-        rows: 13,
-        planes: id <= 45 ? 6 : (id <= 48 ? 7 : 8),
-        obstacles: 7 + (id - 41) ~/ 2,
-        minPath: 7,
-        maxPath: 17,
-        fill: 0.85,
-      );
-    }
-    // 51-60 - карта чуть шире, шестой-седьмой борт становится нормой.
-    if (id <= 60) {
-      return _Difficulty(
-        cols: 9,
-        rows: 13,
-        planes: id <= 54 ? 7 : (id <= 57 ? 8 : 9),
-        obstacles: 8 + (id - 51) ~/ 2,
-        minPath: 7,
-        maxPath: 18,
-        fill: 0.85,
-      );
-    }
-    // 61-80 - поле вытягивается по высоте, до 11 бортов разом.
-    if (id <= 80) {
-      return _Difficulty(
-        cols: 9,
-        rows: 14,
-        planes: id <= 67 ? 9 : (id <= 74 ? 10 : 11),
-        obstacles: 10 + (id - 61) ~/ 2,
-        minPath: 8,
-        maxPath: 19,
-        fill: 0.88,
-      );
-    }
-    // 81-100 - ещё один столбец, плотность застройки почти максимальная.
     if (id <= 100) {
       return _Difficulty(
-        cols: 10,
-        rows: 14,
-        planes: id <= 90 ? 11 : 12,
-        obstacles: 12 + (id - 81) ~/ 2,
-        minPath: 8,
-        maxPath: 20,
-        fill: 0.90,
+        cols: 8, rows: 13, planes: id <= 85 ? 6 : 7,
+        obstacles: 7 + (id - 71) ~/ 6, minPath: 7, maxPath: 17, fill: 0.88,
       );
     }
-    // 101-125 - поле почти максимального размера, до 13 бортов.
+    // EVENT-зона 151-200: до 13 бортов, самые крупные поля в игре.
+    // minPath здесь 7, а не 8: при 11+ бортах места под длинные
+    // трассы не остаётся, и генератор начинал терять самолёты.
+    if (id > 195) {
+      return _Difficulty(
+        cols: 11, rows: 17, planes: 13,
+        obstacles: 10 + (id - 196) ~/ 2, minPath: 7, maxPath: 23, fill: 0.95,
+      );
+    }
+    if (id > 186) {
+      return _Difficulty(
+        cols: 11, rows: 17, planes: 12,
+        obstacles: 10 + (id - 187) ~/ 4, minPath: 7, maxPath: 22, fill: 0.94,
+      );
+    }
+    if (id > 174) {
+      return _Difficulty(
+        cols: 11, rows: 16, planes: 11,
+        obstacles: 10 + (id - 175) ~/ 4, minPath: 7, maxPath: 21, fill: 0.94,
+      );
+    }
+    if (id > 162) {
+      return _Difficulty(
+        cols: 10, rows: 16, planes: 10,
+        obstacles: 9 + (id - 163) ~/ 4, minPath: 7, maxPath: 21, fill: 0.93,
+      );
+    }
+    if (id > 150) {
+      return _Difficulty(
+        cols: 10, rows: 15, planes: 9,
+        obstacles: 9 + (id - 151) ~/ 4, minPath: 7, maxPath: 20, fill: 0.92,
+      );
+    }
+    // Орбитальная зона: 101-150, самое плотное поле в игре.
     if (id <= 125) {
       return _Difficulty(
-        cols: 10,
-        rows: 15,
-        planes: id <= 113 ? 12 : 13,
-        obstacles: 14 + (id - 101) ~/ 3,
-        minPath: 9,
-        maxPath: 21,
-        fill: 0.90,
+        cols: 9, rows: 13, planes: 7,
+        obstacles: 8 + (id - 101) ~/ 5, minPath: 8, maxPath: 18, fill: 0.90,
       );
     }
-    // 126-150 - финальный рубеж: самая большая карта, до 14 бортов.
     return _Difficulty(
-      cols: 10,
-      rows: 16,
-      planes: id <= 140 ? 13 : 14,
-      obstacles: 15 + (id - 126) ~/ 3,
-      minPath: 9,
-      maxPath: 22,
-      fill: 0.92,
+      cols: 9, rows: 14, planes: 8,
+      obstacles: 8 + (id - 126) ~/ 5, minPath: 8, maxPath: 19, fill: 0.92,
     );
   }
 
   // ------------------------------------------------------------- генерация
 
-  static LevelData? _tryGenerate(int levelId, int attempt) {
-    final _Difficulty d = _difficultyFor(levelId);
-    final Random rnd = Random(levelId * 7919 + attempt * 131 + 17);
+  static LevelData? _tryGenerate(
+    int id,
+    int difficultyLevel,
+    int seed,
+    int attempt,
+  ) {
+    final _Difficulty d = _difficultyFor(difficultyLevel);
+    final Random rnd = Random(seed * 7919 + attempt * 131 + 17);
 
     // С каждой неудачей чуть упрощаем карту, чтобы гарантированно сойтись.
     final int obstacles = (d.obstacles - attempt * 2).clamp(0, d.cols * d.rows);
-    final int planeCount = attempt >= 8 ? (d.planes - 1).clamp(1, 14) : d.planes;
+    // Снижаем число бортов только на самых поздних попытках: порог 8
+    // приводил к тому, что плотные уровни конца кампании молча теряли
+    // самолёт вместо ещё одной попытки. Верхний clamp тоже поднят -
+    // в EVENT-зоне бортов до 13.
+    final int planeCount =
+        attempt >= 12 ? (d.planes - 1).clamp(1, 13) : d.planes;
 
     final List<TileType> tiles =
         List<TileType>.filled(d.cols * d.rows, TileType.taxiway);
     _placeObstacles(rnd, tiles, d.cols, d.rows, obstacles);
 
-    final int freeCells = tiles.where((TileType t) => t.isWalkable).length;
+    final int freeCells =
+        tiles.where((TileType t) => t.isWalkable).length;
     if (freeCells < planeCount * d.minPath + 4) return null;
 
     final List<List<GridPos>>? paths = _carvePaths(
@@ -233,12 +200,12 @@ class LevelGenerator {
     }
 
     return LevelData(
-      id: levelId,
+      id: id,
       cols: d.cols,
       rows: d.rows,
       tiles: tiles,
       planes: planes,
-      parMoves: planes.length + 1 + levelId ~/ 20,
+      parMoves: planes.length + 1 + difficultyLevel ~/ 20,
       parSeconds: 10 + routeCells,
     );
   }
@@ -485,7 +452,7 @@ class LevelGenerator {
     const int rows = 8;
     final List<TileType> tiles =
         List<TileType>.filled(cols * rows, TileType.taxiway);
-    final int planeCount = levelId <= 5 ? 2 : (levelId <= 100 ? 3 : 4);
+    final int planeCount = levelId <= 5 ? 2 : 3;
 
     final List<PlaneSpec> planes = <PlaneSpec>[
       for (int i = 0; i < planeCount; i++)

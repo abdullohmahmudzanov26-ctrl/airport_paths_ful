@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 
+import '../data/app_strings.dart';
 import '../theme/app_palette.dart';
 import '../theme/app_text_styles.dart';
 import 'game_button.dart';
@@ -28,20 +29,26 @@ class ScreenHeader extends StatelessWidget {
           IconPlateButton(
             icon: Icons.arrow_back_rounded,
             kind: GameButtonKind.neutral,
-            tooltip: 'Назад',
+            tooltip: tr('home'),
             onPressed: onBack ?? () => Navigator.of(context).maybePop(),
           ),
           Expanded(
-            child: Text(
-              title,
-              textAlign: TextAlign.center,
-              maxLines: 1,
-              overflow: TextOverflow.ellipsis,
-              style: AppText.screenTitle.copyWith(
-                color: p.textPrimary,
-                shadows: const <Shadow>[
-                  Shadow(color: Color(0x99000A14), offset: Offset(0, 2), blurRadius: 6),
-                ],
+            child: FittedBox(
+              fit: BoxFit.scaleDown,
+              child: Text(
+                title,
+                textAlign: TextAlign.center,
+                maxLines: 1,
+                style: AppText.screenTitle.copyWith(
+                  color: p.textPrimary,
+                  shadows: const <Shadow>[
+                    Shadow(
+                      color: Color(0x99000A14),
+                      offset: Offset(0, 2),
+                      blurRadius: 6,
+                    ),
+                  ],
+                ),
               ),
             ),
           ),

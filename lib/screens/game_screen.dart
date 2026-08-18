@@ -1,22 +1,29 @@
+import 'dart:async';
+
 import 'package:flame/game.dart';
 import 'package:flutter/material.dart';
 
 import '../app/routes.dart';
 import '../data/app_strings.dart';
+import '../data/board_themes.dart';
 import '../data/level_repository.dart';
+import '../data/plane_skins.dart';
 import '../game/airport_game.dart';
 import '../game/systems/scoring_system.dart';
 import '../models/achievement.dart';
 import '../models/level_data.dart';
 import '../models/level_result.dart';
+import '../services/ad_service.dart';
 import '../services/audio_service.dart';
 import '../services/service_locator.dart';
 import '../theme/app_palette.dart';
 import '../theme/app_text_styles.dart';
-import '../widgets/airport_backdrop.dart';
+import '../widgets/app_panel.dart';
+import '../widgets/game_backdrop.dart';
 import '../widgets/game_button.dart';
 import '../widgets/icon_plate_button.dart';
 import '../widgets/pause_overlay.dart';
+import '../widgets/responsive_center.dart';
 import '../widgets/screen_header.dart';
 import '../widgets/stat_chip.dart';
 import '../widgets/win_overlay.dart';
@@ -25,9 +32,16 @@ import '../widgets/win_overlay.dart';
 /// Жесты снимает Flutter и передаёт в игру уже в координатах поля:
 /// GestureDetector накрывает ровно тот же прямоугольник, что и GameWidget.
 class GameScreen extends StatefulWidget {
-  const GameScreen({super.key, required this.levelId});
+  const GameScreen({
+    super.key,
+    required this.levelId,
+    this.isDaily = false,
+  });
 
   final int levelId;
+
+  /// Рейс дня: карта из даты, отдельная награда и серия дней.
+  final bool isDaily;
 
   @override
   State<GameScreen> createState() => _GameScreenState();
@@ -40,23 +54,46 @@ class _GameScreenState extends State<GameScreen> with WidgetsBindingObserver {
   LevelResult? _result;
   List<Achievement> _freshAchievements = const <Achievement>[];
 
+  /// Тикает раз в секунду и копит время активной игры.
+  /// Останавливается на паузе, на экране победы и при сворачивании
+  /// (жизненный цикл уже ставит паузу), поэтому фон не засчитывается.
+  Timer? _playClock;
+
   @override
   void initState() {
     super.initState();
     WidgetsBinding.instance.addObserver(this);
-    _level = LevelRepository.level(widget.levelId);
+    _playClock = Timer.periodic(const Duration(seconds: 1), (_) {
+      if (!mounted || _paused || _result != null) return;
+      Services.progress.addPlaySeconds(1);
+    });
+    // Сутки могли смениться, пока игра висела в фоне.
+    Services.progress.refreshDailyHints();
+    _level = widget.isDaily
+        ? LevelRepository.daily(DateTime.now())
+        : LevelRepository.level(widget.levelId);
     _game = AirportGame(
       level: _level,
+      theme: widget.isDaily
+          ? BoardThemes.byId(Services.progress.equippedTheme)
+          : BoardThemes.forLevel(
+              widget.levelId,
+              Services.progress.equippedTheme,
+            ),
+      skin: PlaneSkins.byId(Services.progress.equippedSkin),
       onLevelComplete: _handleWin,
       onCrash: _handleCrash,
     );
-    Services.progress.rememberCurrentLevel(widget.levelId);
     Services.audio.playMusic(MusicTrack.game);
-    LevelRepository.warmUp(widget.levelId + 1);
+    if (!widget.isDaily) {
+      Services.progress.rememberCurrentLevel(widget.levelId);
+      LevelRepository.warmUp(widget.levelId + 1);
+    }
   }
 
   @override
   void dispose() {
+    _playClock?.cancel();
     WidgetsBinding.instance.removeObserver(this);
     Services.audio.playMusic(MusicTrack.menu);
     super.dispose();
@@ -76,10 +113,22 @@ class _GameScreenState extends State<GameScreen> with WidgetsBindingObserver {
 
   /// Текстовая подсказка новичку. Первый уровень учит рисовать,
   /// третий - первый с двумя бортами - учит не пересекаться.
+  /// Первые минуты объясняют игру по одной мысли за уровень:
+  /// как вести, зачем цвета, откуда звёзды, откуда монеты и куда
+  /// их тратить. Дальше подсказки исчезают и не мешают.
+  static const Map<int, String> _tips = <int, String>{
+    1: 'tip_draw',
+    2: 'tip_colors',
+    3: 'tip_cross',
+    4: 'tip_stars',
+    6: 'tip_coins',
+    8: 'tip_airport',
+  };
+
   String? get _tip {
-    if (widget.levelId == 1) return tr('tip_draw');
-    if (widget.levelId == 3) return tr('tip_cross');
-    return null;
+    if (widget.isDaily) return null;
+    final String? key = _tips[widget.levelId];
+    return key == null ? null : tr(key);
   }
 
   void _setPaused(bool value) {
@@ -106,19 +155,39 @@ class _GameScreenState extends State<GameScreen> with WidgetsBindingObserver {
       moves: moves,
       seconds: seconds,
     );
-    final int coins = ScoringSystem.coins(stars: stars, levelId: _level.id);
+    // Флаги копились в AirportGame по ходу забега - здесь только
+    // читаем итог, ничего заново не проверяем.
+    final bool perfect = _game.isPerfectRun;
+    int coins;
+    bool isNewBest;
+    List<Achievement> fresh = const <Achievement>[];
 
-    final int previousBest = Services.progress.bestTime(_level.id);
-    final bool isNewBest = previousBest == 0 || seconds < previousBest;
+    if (widget.isDaily) {
+      // Рейс дня живёт отдельно: он не открывает уровни и не пишет
+      // звёзды в сетку, зато платит больше и держит серию дней.
+      coins = await Services.progress.completeDaily(stars: stars);
+      isNewBest = false;
+    } else {
+      final int computedCoins =
+          ScoringSystem.coins(stars: stars, levelId: _level.id);
+      final int previousBest = Services.progress.bestTime(_level.id);
+      isNewBest = previousBest == 0 || seconds < previousBest;
 
-    final List<Achievement> fresh = await Services.progress.completeLevel(
-      levelId: _level.id,
-      stars: stars,
-      seconds: seconds,
-      moves: moves,
-      coinsEarned: coins,
-      usedHint: _game.usedHint,
-    );
+      final ({List<Achievement> achievements, int coinsAwarded}) result =
+          await Services.progress.completeLevel(
+        levelId: _level.id,
+        stars: stars,
+        seconds: seconds,
+        moves: moves,
+        coinsEarned: computedCoins,
+        usedHint: _game.usedHint,
+        perfect: perfect,
+      );
+      // Экран показывает ровно то, что реально зачислено: 0 при
+      // повторном прохождении, а не расчётную сумму по звёздам.
+      coins = result.coinsAwarded;
+      fresh = result.achievements;
+    }
 
     if (!mounted) return;
     setState(() {
@@ -131,6 +200,7 @@ class _GameScreenState extends State<GameScreen> with WidgetsBindingObserver {
         coins: coins,
         isNewBest: isNewBest,
         usedHint: _game.usedHint,
+        perfect: perfect,
       );
     });
   }
@@ -146,6 +216,10 @@ class _GameScreenState extends State<GameScreen> with WidgetsBindingObserver {
   }
 
   void _openNextLevel() {
+    if (widget.isDaily) {
+      Navigator.of(context).pop();
+      return;
+    }
     final int next = _level.id + 1;
     if (!LevelRepository.exists(next)) {
       Navigator.of(context).pop();
@@ -161,11 +235,77 @@ class _GameScreenState extends State<GameScreen> with WidgetsBindingObserver {
     if (_game.routes.allComplete) return;
     final bool paid = await Services.progress.spendHint();
     if (!paid) {
-      _toast(tr('no_hints'), Icons.lightbulb_outline_rounded);
+      // Подсказки кончились - предлагаем ролик, а не тупик.
+      await _offerAdForHints();
       return;
     }
     _game.applyHint();
     setState(() {});
+  }
+
+  /// Подсказок нет: показываем предложение посмотреть ролик.
+  Future<void> _offerAdForHints() async {
+    final AppPalette p = context.palette;
+    final bool canWatch = Services.ads.canWatch;
+
+    final bool? watch = await showDialog<bool>(
+      context: context,
+      barrierColor: Colors.black.withValues(alpha: 0.66),
+      builder: (BuildContext context) => Dialog(
+        backgroundColor: Colors.transparent,
+        elevation: 0,
+        child: AppPanel(
+          padding: const EdgeInsets.fromLTRB(20, 20, 20, 20),
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            children: <Widget>[
+              Icon(Icons.lightbulb_rounded, size: 38, color: p.primary.top),
+              const SizedBox(height: 12),
+              Text(
+                tr('out_of_hints'),
+                style: AppText.value.copyWith(color: p.textPrimary),
+              ),
+              const SizedBox(height: 8),
+              Text(
+                canWatch ? tr('watch_for_hints') : tr('no_ads_left'),
+                textAlign: TextAlign.center,
+                style: AppText.body.copyWith(color: p.textSecondary),
+              ),
+              const SizedBox(height: 18),
+              if (canWatch)
+                GameButton(
+                  label: '${tr('watch')}  +${AdService.hintsPerAd}',
+                  icon: Icons.play_circle_fill_rounded,
+                  kind: GameButtonKind.success,
+                  width: 230,
+                  onPressed: () => Navigator.of(context).pop(true),
+                ),
+              if (canWatch) const SizedBox(height: 10),
+              GameButton(
+                label: tr('cancel'),
+                kind: GameButtonKind.neutral,
+                width: 230,
+                onPressed: () => Navigator.of(context).pop(false),
+              ),
+            ],
+          ),
+        ),
+      ),
+    );
+
+    if (watch != true || !mounted) return;
+
+    final bool rewarded = await Services.ads.showRewarded();
+    if (!mounted) return;
+    if (rewarded) {
+      await Services.progress.rewardHints(AdService.hintsPerAd);
+      if (mounted) {
+        Services.audio.play(Sfx.star);
+        _toast(tr('reward_received'), Icons.lightbulb_rounded);
+      }
+    } else {
+      _toast(tr('ad_failed'), Icons.info_rounded);
+    }
   }
 
   void _toast(String message, IconData icon) {
@@ -207,23 +347,24 @@ class _GameScreenState extends State<GameScreen> with WidgetsBindingObserver {
         if (_paused) _setPaused(false);
       },
       child: Scaffold(
-        body: AirportBackdrop(
-          sceneHeightFactor: 0,
-          animatePlane: false,
+        body: GameBackdrop(
+          theme: _game.theme,
           child: SafeArea(
             child: Stack(
               children: <Widget>[
                 Column(
                   children: <Widget>[
                     ScreenHeader(
-                      title: '${tr('level')} ${widget.levelId}',
+                      title: widget.isDaily
+                          ? tr('daily')
+                          : '${tr('level')} ${widget.levelId}',
                       action: IconPlateButton(
                         icon: Icons.pause_rounded,
                         tooltip: tr('pause'),
                         onPressed: () => _setPaused(true),
                       ),
                     ),
-                    _Hud(game: _game),
+                    ResponsiveCenter(maxWidth: 480, child: _Hud(game: _game)),
                     const SizedBox(height: 8),
                     Expanded(
                       child: Padding(
@@ -242,10 +383,13 @@ class _GameScreenState extends State<GameScreen> with WidgetsBindingObserver {
                     ),
                     _TipCard(game: _game, text: _tip),
                     const SizedBox(height: 8),
-                    _Controls(
-                      game: _game,
-                      onUndo: _game.undo,
-                      onHint: _useHint,
+                    ResponsiveCenter(
+                      maxWidth: 480,
+                      child: _Controls(
+                        game: _game,
+                        onUndo: _game.undo,
+                        onHint: _useHint,
+                      ),
                     ),
                     const SizedBox(height: 16),
                   ],

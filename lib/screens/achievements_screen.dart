@@ -9,6 +9,7 @@ import '../theme/app_text_styles.dart';
 import '../widgets/airport_backdrop.dart';
 import '../widgets/animated_entrance.dart';
 import '../widgets/app_panel.dart';
+import '../widgets/responsive_center.dart';
 import '../widgets/screen_header.dart';
 import '../widgets/stat_chip.dart';
 
@@ -49,7 +50,8 @@ class AchievementsScreen extends StatelessWidget {
                   ),
                   const SizedBox(height: 10),
                   Expanded(
-                    child: ListView.builder(
+                    child: ResponsiveCenter(
+                      child: ListView.builder(
                       padding: const EdgeInsets.fromLTRB(18, 4, 18, 24),
                       itemCount: AchievementsCatalog.all.length,
                       itemBuilder: (BuildContext context, int i) {
@@ -65,6 +67,7 @@ class AchievementsScreen extends StatelessWidget {
                           ),
                         );
                       },
+                    ),
                     ),
                   ),
                 ],

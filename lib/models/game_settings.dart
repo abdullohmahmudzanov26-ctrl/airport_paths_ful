@@ -9,7 +9,7 @@ class GameSettings {
     this.musicVolume = 0.6,
     this.soundVolume = 0.85,
     this.darkTheme = true,
-    this.languageCode = 'ru',
+    this.languageCode = 'en',
   });
 
   final bool music;
@@ -59,7 +59,7 @@ class GameSettings {
         musicVolume: (map['musicVolume'] as num?)?.toDouble() ?? 0.6,
         soundVolume: (map['soundVolume'] as num?)?.toDouble() ?? 0.85,
         darkTheme: map['darkTheme'] as bool? ?? true,
-        languageCode: map['languageCode'] as String? ?? 'ru',
+        languageCode: map['languageCode'] as String? ?? 'en',
       );
 
   String encode() => jsonEncode(toMap());
