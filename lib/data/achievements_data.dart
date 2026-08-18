@@ -77,6 +77,34 @@ class AchievementsCatalog {
       icon: Icons.verified_rounded,
       test: _flawless,
     ),
+    Achievement(
+      id: 'super_50',
+      titleKey: 'ach_super50_title',
+      descriptionKey: 'ach_super50_desc',
+      icon: Icons.rocket_launch_rounded,
+      test: _super50,
+    ),
+    Achievement(
+      id: 'super_100',
+      titleKey: 'ach_super100_title',
+      descriptionKey: 'ach_super100_desc',
+      icon: Icons.bolt_rounded,
+      test: _super100,
+    ),
+    Achievement(
+      id: 'super_150',
+      titleKey: 'ach_super150_title',
+      descriptionKey: 'ach_super150_desc',
+      icon: Icons.diamond_rounded,
+      test: _super150,
+    ),
+    Achievement(
+      id: 'super_200',
+      titleKey: 'ach_super200_title',
+      descriptionKey: 'ach_super200_desc',
+      icon: Icons.emoji_events_rounded,
+      test: _super200,
+    ),
   ];
 
   static Achievement? byId(String id) {
@@ -105,4 +133,9 @@ class AchievementsCatalog {
   static bool _rich(AchievementStats s) => s.coins >= 1000;
 
   static bool _flawless(AchievementStats s) => s.perfectRuns >= 5;
+
+  static bool _super50(AchievementStats s) => s.completedLevels >= 50;
+  static bool _super100(AchievementStats s) => s.completedLevels >= 100;
+  static bool _super150(AchievementStats s) => s.completedLevels >= 150;
+  static bool _super200(AchievementStats s) => s.completedLevels >= 200;
 }

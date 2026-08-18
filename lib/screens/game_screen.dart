@@ -8,6 +8,7 @@ import '../data/app_strings.dart';
 import '../data/board_themes.dart';
 import '../data/level_repository.dart';
 import '../data/plane_skins.dart';
+import '../data/super_milestones.dart';
 import '../game/airport_game.dart';
 import '../game/systems/scoring_system.dart';
 import '../models/achievement.dart';
@@ -26,6 +27,7 @@ import '../widgets/pause_overlay.dart';
 import '../widgets/responsive_center.dart';
 import '../widgets/screen_header.dart';
 import '../widgets/stat_chip.dart';
+import '../widgets/super_milestone_overlay.dart';
 import '../widgets/win_overlay.dart';
 
 /// Игровой экран. Шапка, HUD и кнопки - Flutter, поле - Flame.
@@ -189,9 +191,25 @@ class _GameScreenState extends State<GameScreen> with WidgetsBindingObserver {
       fresh = result.achievements;
     }
 
+    // Супер-веха получает отдельный полноэкранный момент, поэтому её
+    // не дублируем ещё и мелкой строкой в обычном списке достижений.
+    SuperMilestone? milestone;
+    for (final Achievement a in fresh) {
+      final SuperMilestone? m = SuperMilestones.byAchievementId(a.id);
+      if (m != null) {
+        milestone = m;
+        break;
+      }
+    }
+    final List<Achievement> inlineAchievements = milestone == null
+        ? fresh
+        : fresh
+            .where((Achievement a) => a.id != milestone!.achievementId)
+            .toList();
+
     if (!mounted) return;
     setState(() {
-      _freshAchievements = fresh;
+      _freshAchievements = inlineAchievements;
       _result = LevelResult(
         levelId: _level.id,
         stars: stars,
@@ -203,6 +221,16 @@ class _GameScreenState extends State<GameScreen> with WidgetsBindingObserver {
         perfect: perfect,
       );
     });
+
+    if (milestone != null && mounted) {
+      await showDialog<void>(
+        context: context,
+        barrierDismissible: false,
+        barrierColor: Colors.black.withValues(alpha: 0.85),
+        builder: (BuildContext context) =>
+            SuperMilestoneOverlay(milestone: milestone!),
+      );
+    }
   }
 
   /// Столкновение почти невозможно - маршруты не пересекаются, -

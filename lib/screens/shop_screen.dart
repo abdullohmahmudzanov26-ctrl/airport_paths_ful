@@ -2,6 +2,7 @@ import 'dart:math' as math;
 
 import 'package:flutter/material.dart';
 
+import '../app/routes.dart';
 import '../data/app_strings.dart';
 import '../data/board_themes.dart';
 import '../data/plane_skins.dart';
@@ -138,10 +139,15 @@ class _ShopScreenState extends State<ShopScreen>
                   Row(
                     mainAxisAlignment: MainAxisAlignment.center,
                     children: <Widget>[
-                      StatChip(
-                        icon: Icons.monetization_on_rounded,
-                        value: '${Services.progress.coins}',
-                        iconColor: p.coin,
+                      GestureDetector(
+                        behavior: HitTestBehavior.opaque,
+                        onTap: () => Navigator.of(context)
+                            .pushNamed(Routes.coinsShop),
+                        child: StatChip(
+                          icon: Icons.monetization_on_rounded,
+                          value: '${Services.progress.coins}',
+                          iconColor: p.coin,
+                        ),
                       ),
                       const SizedBox(width: 12),
                       StatChip(

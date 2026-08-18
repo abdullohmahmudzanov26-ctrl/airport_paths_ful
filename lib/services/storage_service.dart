@@ -23,6 +23,10 @@ class StorageKeys {
   static const String hintsRefillDay = 'hints_refill_day';
   static const String adsDay = 'ads_day';
   static const String adsCount = 'ads_count';
+  static const String adsBonusDay = 'ads_bonus_day';
+  static const String adsBonusCount = 'ads_bonus_count';
+  static const String coinsDailyBonusDay = 'coins_daily_bonus_day';
+  static const String doubleRewardArmed = 'double_reward_armed';
   static const String airportLevel = 'airport_level';
   static const String airportIncomeDay = 'airport_income_day';
   static const String playSeconds = 'play_seconds';

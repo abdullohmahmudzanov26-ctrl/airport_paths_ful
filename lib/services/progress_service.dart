@@ -3,6 +3,7 @@ import 'package:flutter/foundation.dart';
 import '../data/achievements_data.dart';
 import '../data/airport_evolution.dart';
 import '../data/board_themes.dart';
+import '../data/super_milestones.dart';
 import '../data/daily_flight.dart';
 import '../data/plane_skins.dart';
 import '../data/level_repository.dart';
@@ -42,6 +43,8 @@ class ProgressService extends ChangeNotifier {
   int _perfectLevels = 0;
   int _perfectRuns = 0;
   int _unlockProgress = 0;
+  int _coinsBonusDay = 0;
+  bool _doubleRewardArmed = false;
 
   int get unlockedLevel => _unlocked;
 
@@ -80,6 +83,9 @@ class ProgressService extends ChangeNotifier {
     }
 
     _hintsRefillDay = _storage.getInt(StorageKeys.hintsRefillDay, 0);
+    _coinsBonusDay = _storage.getInt(StorageKeys.coinsDailyBonusDay, 0);
+    _doubleRewardArmed =
+        _storage.getBool(StorageKeys.doubleRewardArmed, false);
     await refreshDailyHints();
 
     _dailyLast = _storage.getInt(StorageKeys.dailyLast, 0);
@@ -174,7 +180,13 @@ class ProgressService extends ChangeNotifier {
     // прохождении. Повторные забеги улучшают время и звёзды,
     // но не превращаются в бесконечный источник монет.
     final bool firstClear = prevStars == 0;
-    final int coinsAwarded = firstClear ? coinsEarned : 0;
+    int coinsAwarded = firstClear ? coinsEarned : 0;
+    final bool doubled = _doubleRewardArmed && coinsAwarded > 0;
+    if (doubled) {
+      coinsAwarded *= 2;
+      _doubleRewardArmed = false;
+      await _storage.setBool(StorageKeys.doubleRewardArmed, false);
+    }
 
     if (stars > prevStars) {
       await _storage.setInt(StorageKeys.stars(levelId), stars);
@@ -236,6 +248,16 @@ class ProgressService extends ChangeNotifier {
         StorageKeys.achievements,
         _achievements.toList(),
       );
+      // Супер-вехи платят отдельно от обычной награды уровня, ровно
+      // в момент первой разблокировки. Повторно это достижение уже
+      // не разблокируется - отдельный флаг "выдано" тут не нужен.
+      for (final Achievement a in fresh) {
+        final SuperMilestone? m = SuperMilestones.byAchievementId(a.id);
+        if (m != null) {
+          _coins += m.coins;
+          await _storage.setInt(StorageKeys.coins, _coins);
+        }
+      }
     }
     return fresh;
   }
@@ -378,6 +400,40 @@ class ProgressService extends ChangeNotifier {
       StorageKeys.ownedThemes,
       _ownedThemes.toList(),
     );
+  }
+
+  // ------------------------------------------------------ COINS SHOP
+
+  /// Бесплатные монеты раз в сутки - независимо от Daily Flight,
+  /// который остаётся про головоломку, а не про валюту.
+  static const int dailyBonusCoins = 50;
+
+  /// Обёртка над static const - экран обращается к Services.progress,
+  /// а не к классу напрямую.
+  int get dailyBonusCoinsValue => dailyBonusCoins;
+
+  bool get dailyBonusReady => _coinsBonusDay != DailyFlight.todayKey();
+
+  Future<int> claimDailyBonus() async {
+    if (!dailyBonusReady) return 0;
+    _coinsBonusDay = DailyFlight.todayKey();
+    _coins += dailyBonusCoins;
+    await _storage.setInt(StorageKeys.coinsDailyBonusDay, _coinsBonusDay);
+    await _storage.setInt(StorageKeys.coins, _coins);
+    await _checkAchievements();
+    notifyListeners();
+    return dailyBonusCoins;
+  }
+
+  /// Взведённое удвоение сгорает при следующей РЕАЛЬНОЙ выплате за
+  /// уровень (см. completeLevel) - повторное прохождение уже
+  /// пройденного уровня, где coinsAwarded == 0, его не тратит.
+  bool get doubleRewardArmed => _doubleRewardArmed;
+
+  Future<void> armDoubleReward() async {
+    _doubleRewardArmed = true;
+    await _storage.setBool(StorageKeys.doubleRewardArmed, true);
+    notifyListeners();
   }
 
   // ------------------------------------------------- монеты за время игры
@@ -539,9 +595,13 @@ class ProgressService extends ChangeNotifier {
     _dailyReward = 0;
     _airportLevel = 0;
     _airportIncomeDay = 0;
+    _coinsBonusDay = 0;
+    _doubleRewardArmed = false;
     _playSeconds = 0;
     await _storage.setInt(StorageKeys.airportLevel, 0);
     await _storage.setInt(StorageKeys.airportIncomeDay, 0);
+    await _storage.setInt(StorageKeys.coinsDailyBonusDay, 0);
+    await _storage.setBool(StorageKeys.doubleRewardArmed, false);
     await _storage.setInt(StorageKeys.playSeconds, 0);
     await _storage.setInt(StorageKeys.unlockedLevel, 1);
     await _storage.setInt(StorageKeys.currentLevel, 1);

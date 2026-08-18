@@ -3,6 +3,7 @@ import 'package:flutter/material.dart';
 import '../screens/about_screen.dart';
 import '../screens/achievements_screen.dart';
 import '../screens/game_screen.dart';
+import '../screens/coins_shop_screen.dart';
 import '../screens/legal_document_screen.dart';
 import '../screens/levels_screen.dart';
 import '../screens/main_menu_screen.dart';
@@ -23,6 +24,7 @@ class Routes {
   static const String achievements = '/achievements';
   static const String shop = '/shop';
   static const String myAirport = '/my-airport';
+  static const String coinsShop = '/coins-shop';
   static const String privacy = '/privacy';
   static const String terms = '/terms';
 }
@@ -58,6 +60,8 @@ class AppRouter {
         return _scale(const ShopScreen(), settings);
       case Routes.myAirport:
         return _scale(const MyAirportScreen(), settings);
+      case Routes.coinsShop:
+        return _scale(const CoinsShopScreen(), settings);
       case Routes.privacy:
         return _scale(
           const LegalDocumentScreen(kind: LegalDocKind.privacy),

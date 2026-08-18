@@ -19,13 +19,21 @@ class AdService extends ChangeNotifier {
   static const int coinsPerAd = 100;
   static const int hintsPerAd = 5;
 
+  /// Бонусный ролик - крупнее награда, отдельный и более тесный лимит.
+  static const int bonusCoinsPerAd = 250;
+  static const int maxBonusPerDay = 3;
+
   int _day = 0;
   int _count = 0;
+  int _bonusDay = 0;
+  int _bonusCount = 0;
   bool _showing = false;
 
   Future<void> load() async {
     _day = _storage.getInt(StorageKeys.adsDay, 0);
     _count = _storage.getInt(StorageKeys.adsCount, 0);
+    _bonusDay = _storage.getInt(StorageKeys.adsBonusDay, 0);
+    _bonusCount = _storage.getInt(StorageKeys.adsBonusCount, 0);
     _rolloverIfNeeded();
   }
 
@@ -41,20 +49,37 @@ class AdService extends ChangeNotifier {
   /// Идёт показ — экран должен заблокировать кнопки.
   bool get isShowing => _showing;
 
+  int get bonusWatchedToday {
+    _rolloverIfNeeded();
+    return _bonusCount;
+  }
+
+  int get bonusLeftToday => maxBonusPerDay - bonusWatchedToday;
+
+  bool get canWatchBonus => bonusLeftToday > 0 && !_showing;
+
   void _rolloverIfNeeded() {
     final int today = DailyFlight.todayKey();
-    if (_day == today) return;
-    _day = today;
-    _count = 0;
-    _storage.setInt(StorageKeys.adsDay, _day);
-    _storage.setInt(StorageKeys.adsCount, 0);
+    if (_day != today) {
+      _day = today;
+      _count = 0;
+      _storage.setInt(StorageKeys.adsDay, _day);
+      _storage.setInt(StorageKeys.adsCount, 0);
+    }
+    if (_bonusDay != today) {
+      _bonusDay = today;
+      _bonusCount = 0;
+      _storage.setInt(StorageKeys.adsBonusDay, _bonusDay);
+      _storage.setInt(StorageKeys.adsBonusCount, 0);
+    }
   }
 
   /// Показывает ролик и сообщает, досмотрел ли игрок до награды.
-  /// Счётчик растёт только при честном просмотре.
-  Future<bool> showRewarded() async {
+  /// Счётчик растёт только при честном просмотре. bonus=true списывает
+  /// отдельный, более тесный лимит крупного ролика +250.
+  Future<bool> showRewarded({bool bonus = false}) async {
     _rolloverIfNeeded();
-    if (!canWatch) return false;
+    if (!(bonus ? canWatchBonus : canWatch)) return false;
 
     _showing = true;
     notifyListeners();
@@ -68,8 +93,13 @@ class AdService extends ChangeNotifier {
     }
 
     if (rewarded) {
-      _count++;
-      await _storage.setInt(StorageKeys.adsCount, _count);
+      if (bonus) {
+        _bonusCount++;
+        await _storage.setInt(StorageKeys.adsBonusCount, _bonusCount);
+      } else {
+        _count++;
+        await _storage.setInt(StorageKeys.adsCount, _count);
+      }
     }
 
     _showing = false;
