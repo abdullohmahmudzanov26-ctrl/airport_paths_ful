@@ -10,20 +10,19 @@ dependencies:
   flutter:
     sdk: flutter
 
-  # Игровой движок
+  # Игровой движок (поле, самолёты, маршруты) - Этап 3+
   flame: ^1.18.0
 
   # Сохранение прогресса и настроек
   shared_preferences: ^2.2.3
 
-  # Музыка и звуковые эффекты
+  # Музыка и звуковые эффекты - Этап 6
   audioplayers: ^6.1.0
 
 dev_dependencies:
   flutter_test:
     sdk: flutter
   flutter_lints: ^4.0.0
-  flutter_launcher_icons: ^0.14.4
 
 flutter:
   uses-material-design: true
@@ -31,9 +30,8 @@ flutter:
   assets:
     - assets/audio/sfx/
     - assets/audio/music/
-    - assets/images/
 
-  # Когда добавишь свой шрифт - раскомментируй
+  # Когда добавишь свой шрифт - раскомментируй и положи файлы в assets/fonts/
   # fonts:
   #   - family: AirportDisplay
   #     fonts:
@@ -41,8 +39,3 @@ flutter:
   #         weight: 700
   #       - asset: assets/fonts/AirportDisplay-Black.ttf
   #         weight: 900
-
-flutter_launcher_icons:
-  android: true
-  ios: true
-  image_path: "assets/images/app_icon.jpg"

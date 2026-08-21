@@ -4,6 +4,8 @@ import 'package:flame/components.dart';
 import 'package:flame/game.dart';
 import 'package:flutter/foundation.dart';
 
+import '../data/level_features.dart';
+import '../data/level_quests.dart';
 import '../models/board_theme.dart';
 import '../models/level_data.dart';
 import '../models/plane_skin.dart';
@@ -14,6 +16,7 @@ import 'components/airport_map_component.dart';
 import 'components/plane_component.dart';
 import 'components/route_layer_component.dart';
 import 'components/tutorial_layer_component.dart';
+import 'dynamic_events.dart';
 import 'components/weather_layer_component.dart';
 import 'systems/collision_system.dart';
 import 'systems/route_controller.dart';
@@ -145,6 +148,25 @@ class AirportGame extends FlameGame {
   bool hadMistake = false;
   bool usedUndo = false;
 
+  /// Главное событие уровня - вычисляется один раз при загрузке,
+  /// процедурно по номеру уровня (см. data/level_features.dart).
+  late final LevelFeature feature = LevelFeatures.forLevel(level.id);
+
+  /// Задание уровня - тем же приёмом, что и feature.
+  late final LevelQuest quest =
+      LevelQuests.forLevel(level.id, planeCount: level.planes.length);
+
+  /// Динамические ивенты: тикают из уже существующего update(dt),
+  /// нового Timer/тикера не заводится.
+  late final DynamicEventController events = DynamicEventController(
+    levelId: level.id,
+    planeCount: level.planes.length,
+  );
+
+  /// id борта, прилетевшего первым - для задания firstPlane.
+  /// Пишется один раз в уже существующем цикле _updateRun.
+  int? firstArrivedPlaneId;
+
   /// Уровень пройден без единой ошибки, без отмены и без подсказки.
   bool get isPerfectRun => !hadMistake && !usedUndo && !usedHint;
 
@@ -168,9 +190,11 @@ class AirportGame extends FlameGame {
       await add(plane);
     }
 
-    // Чисто декоративный слой поверх сцены - есть только у тем,
-    // чья погода задана (см. BoardTheme.weather).
-    if (theme.weather != WeatherKind.none) {
+    // Чисто декоративный слой поверх сцены - есть у тем со своей
+    // погодой (BoardTheme.weather) и у уровней, где главное событие
+    // задаёт погоду явно (feature.weatherOverride, например туман
+    // или гроза), даже если базовая тема ясная.
+    if (theme.weather != WeatherKind.none || feature.weatherOverride != null) {
       await add(WeatherLayerComponent(this));
     }
 
@@ -218,6 +242,7 @@ class AirportGame extends FlameGame {
         break;
     }
 
+    events.tick(dt, drawing: phase == GamePhase.drawing);
     _syncHud();
   }
 
@@ -246,7 +271,11 @@ class AirportGame extends FlameGame {
     final List<Offset> flying = <Offset>[];
 
     for (final PlaneComponent plane in planes) {
+      final bool wasArrived = plane.arrived;
       plane.advance(dt);
+      if (!wasArrived && plane.arrived) {
+        firstArrivedPlaneId ??= plane.spec.id;
+      }
       if (!plane.arrived) {
         allArrived = false;
         flying.add(plane.position);
@@ -379,6 +408,7 @@ class AirportGame extends FlameGame {
     usedUndo = false;
     _celebration = 0;
     _completionReported = false;
+    firstArrivedPlaneId = null;
     _syncHud();
   }
 

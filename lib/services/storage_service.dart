@@ -36,6 +36,7 @@ class StorageKeys {
   static String bestTime(int levelId) => 'best_time_$levelId';
   static String bestMoves(int levelId) => 'best_moves_$levelId';
   static String perfect(int levelId) => 'perfect_$levelId';
+  static String quest(int levelId) => 'quest_$levelId';
 }
 
 /// Тонкая обёртка над SharedPreferences. Все чтения синхронные

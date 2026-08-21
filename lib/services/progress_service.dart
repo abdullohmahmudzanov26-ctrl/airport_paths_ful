@@ -144,6 +144,22 @@ class ProgressService extends ChangeNotifier {
   bool isPerfectRun(int levelId) =>
       _storage.getBool(StorageKeys.perfect(levelId), false);
 
+  /// Задание уровня выполнено - тем же приёмом, что и Perfect Run:
+  /// булев флаг на устройстве, пишется один раз навсегда.
+  bool isQuestDone(int levelId) =>
+      _storage.getBool(StorageKeys.quest(levelId), false);
+
+  /// Награда за задание. Вызывающая сторона (game_screen) сама решает,
+  /// выполнено ли условие - здесь только идемпотентная запись и выплата.
+  Future<void> completeQuest(int levelId, int reward) async {
+    if (isQuestDone(levelId)) return;
+    await _storage.setBool(StorageKeys.quest(levelId), true);
+    _coins += reward;
+    await _storage.setInt(StorageKeys.coins, _coins);
+    await _checkAchievements();
+    notifyListeners();
+  }
+
   int get totalStars => _totalStars;
 
   int get completedLevels => _completedLevels;

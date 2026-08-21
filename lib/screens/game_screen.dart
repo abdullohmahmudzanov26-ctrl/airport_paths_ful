@@ -23,6 +23,7 @@ import '../widgets/app_panel.dart';
 import '../widgets/game_backdrop.dart';
 import '../widgets/game_button.dart';
 import '../widgets/icon_plate_button.dart';
+import '../widgets/level_intel_panel.dart';
 import '../widgets/pause_overlay.dart';
 import '../widgets/responsive_center.dart';
 import '../widgets/screen_header.dart';
@@ -162,6 +163,7 @@ class _GameScreenState extends State<GameScreen> with WidgetsBindingObserver {
     final bool perfect = _game.isPerfectRun;
     int coins;
     bool isNewBest;
+    bool questJustCompleted = false;
     List<Achievement> fresh = const <Achievement>[];
 
     if (widget.isDaily) {
@@ -189,6 +191,14 @@ class _GameScreenState extends State<GameScreen> with WidgetsBindingObserver {
       // повторном прохождении, а не расчётную сумму по звёздам.
       coins = result.coinsAwarded;
       fresh = result.achievements;
+
+      // Задание проверяется один раз, в момент победы - не каждый
+      // кадр. completeQuest сам идемпотентен, повторно не заплатит.
+      if (!Services.progress.isQuestDone(_level.id) &&
+          _game.quest.check(_game)) {
+        await Services.progress.completeQuest(_level.id, _game.quest.reward);
+        questJustCompleted = true;
+      }
     }
 
     // Супер-веха получает отдельный полноэкранный момент, поэтому её
@@ -221,6 +231,13 @@ class _GameScreenState extends State<GameScreen> with WidgetsBindingObserver {
         perfect: perfect,
       );
     });
+
+    if (questJustCompleted && mounted) {
+      _toast(
+        '${tr('quest_complete')}  +${_game.quest.reward}',
+        Icons.task_alt_rounded,
+      );
+    }
 
     if (milestone != null && mounted) {
       await showDialog<void>(
@@ -261,6 +278,10 @@ class _GameScreenState extends State<GameScreen> with WidgetsBindingObserver {
 
   Future<void> _useHint() async {
     if (_game.routes.allComplete) return;
+    if (_game.feature.noHints) {
+      _toast(tr('feat_nohint_toast'), Icons.block_rounded);
+      return;
+    }
     final bool paid = await Services.progress.spendHint();
     if (!paid) {
       // Подсказки кончились - предлагаем ролик, а не тупик.
@@ -393,6 +414,13 @@ class _GameScreenState extends State<GameScreen> with WidgetsBindingObserver {
                       ),
                     ),
                     ResponsiveCenter(maxWidth: 480, child: _Hud(game: _game)),
+                    if (!widget.isDaily) ...<Widget>[
+                      const SizedBox(height: 6),
+                      ResponsiveCenter(
+                        maxWidth: 480,
+                        child: LevelIntelPanel(game: _game),
+                      ),
+                    ],
                     const SizedBox(height: 8),
                     Expanded(
                       child: Padding(

@@ -55,7 +55,10 @@ class WeatherLayerComponent extends Component {
 
   @override
   Future<void> onLoad() async {
-    _active = game.theme.weather;
+    // Тема задаёт базовую погоду, но главное событие уровня (гроза,
+    // туман) может её переопределить именно для этого сеанса - тема
+    // игрока и её владение при этом не меняются.
+    _active = game.feature.weatherOverride ?? game.theme.weather;
 
     switch (_active) {
       case WeatherKind.rain:
