@@ -58,6 +58,7 @@ class AppPalette extends ThemeExtension<AppPalette> {
     required this.danger,
     required this.neutral,
     required this.locked,
+    required this.boss,
   });
 
   final Color bgTop;
@@ -82,6 +83,11 @@ class AppPalette extends ThemeExtension<AppPalette> {
   final ButtonPalette danger;
   final ButtonPalette neutral;
   final ButtonPalette locked;
+
+  /// Плитка босс-уровня. Намеренно выбивается из зелёно-синего ряда:
+  /// пурпур с золотой рамкой ни с пройденным, ни со следующим уровнем
+  /// не спутаешь.
+  final ButtonPalette boss;
 
   LinearGradient get backgroundGradient => LinearGradient(
         begin: Alignment.topCenter,
@@ -141,6 +147,12 @@ class AppPalette extends ThemeExtension<AppPalette> {
       border: Color(0xFF35516F),
       text: Color(0xFF6E88A6),
     ),
+    boss: ButtonPalette(
+      top: Color(0xFFB44BF0),
+      bottom: Color(0xFF7A1FB8),
+      shadow: Color(0xFF44096B),
+      border: Color(0xFFFFD54F),
+    ),
   );
 
   // ---------------------------------------------------------------- СВЕТЛАЯ
@@ -195,6 +207,12 @@ class AppPalette extends ThemeExtension<AppPalette> {
       border: Color(0xFFE7EFF6),
       text: Color(0xFF7C93A8),
     ),
+    boss: ButtonPalette(
+      top: Color(0xFFC062F5),
+      bottom: Color(0xFF8A2BC9),
+      shadow: Color(0xFF5A1189),
+      border: Color(0xFFFFCF3D),
+    ),
   );
 
   @override
@@ -217,6 +235,7 @@ class AppPalette extends ThemeExtension<AppPalette> {
     ButtonPalette? danger,
     ButtonPalette? neutral,
     ButtonPalette? locked,
+    ButtonPalette? boss,
   }) {
     return AppPalette(
       bgTop: bgTop ?? this.bgTop,
@@ -237,6 +256,7 @@ class AppPalette extends ThemeExtension<AppPalette> {
       danger: danger ?? this.danger,
       neutral: neutral ?? this.neutral,
       locked: locked ?? this.locked,
+      boss: boss ?? this.boss,
     );
   }
 
@@ -262,6 +282,7 @@ class AppPalette extends ThemeExtension<AppPalette> {
       danger: ButtonPalette.lerp(danger, other.danger, t),
       neutral: ButtonPalette.lerp(neutral, other.neutral, t),
       locked: ButtonPalette.lerp(locked, other.locked, t),
+      boss: ButtonPalette.lerp(boss, other.boss, t),
     );
   }
 }

@@ -1,5 +1,6 @@
 import 'ad_service.dart';
 import 'audio_service.dart';
+import 'boss_service.dart';
 import 'haptic_service.dart';
 import 'progress_service.dart';
 import 'settings_service.dart';
@@ -16,6 +17,10 @@ class Services {
   static final HapticService haptics = HapticService(settings);
   static final ProgressService progress = ProgressService(storage);
   static final AdService ads = AdService(storage);
+
+  /// Состояние босс-лабиринтов: попытки и блокировка. Читает то же
+  /// хранилище, что и остальные сервисы, отдельной загрузки не требует.
+  static final BossService boss = BossService(storage);
 
   static bool _initialized = false;
 

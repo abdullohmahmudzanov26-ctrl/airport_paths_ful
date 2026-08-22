@@ -32,6 +32,13 @@ class StorageKeys {
   static const String playSeconds = 'play_seconds';
   static const String firstRun = 'first_run';
 
+  // Босс-лабиринт: попытки, блокировка, прохождение и рекорд.
+  // Ключи привязаны к номеру уровня-босса (10, 20, 30...).
+  static String bossAttempts(int levelId) => 'boss_attempts_$levelId';
+  static String bossLockUntil(int levelId) => 'boss_lock_until_$levelId';
+  static String bossCleared(int levelId) => 'boss_cleared_$levelId';
+  static String bossBestTime(int levelId) => 'boss_best_time_$levelId';
+
   static String stars(int levelId) => 'stars_$levelId';
   static String bestTime(int levelId) => 'best_time_$levelId';
   static String bestMoves(int levelId) => 'best_moves_$levelId';

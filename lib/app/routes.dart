@@ -1,7 +1,9 @@
 import 'package:flutter/material.dart';
 
+import '../data/boss_config.dart';
 import '../screens/about_screen.dart';
 import '../screens/achievements_screen.dart';
+import '../screens/boss_maze_screen.dart';
 import '../screens/game_screen.dart';
 import '../screens/coins_shop_screen.dart';
 import '../screens/legal_document_screen.dart';
@@ -76,6 +78,13 @@ class AppRouter {
         final Object? args = settings.arguments;
         final int levelId = args is GameArgs ? args.levelId : 1;
         final bool isDaily = args is GameArgs && args.isDaily;
+        // Каждый десятый уровень - босс-лабиринт. Подмена делается
+        // здесь, в одной точке: и меню, и сетка уровней, и кнопка
+        // «следующий уровень» ходят через этот же маршрут, поэтому
+        // менять их не пришлось. Рейс дня боссом не становится.
+        if (!isDaily && BossConfig.isBoss(levelId)) {
+          return _fade(BossMazeScreen(levelId: levelId), settings);
+        }
         return _fade(
           GameScreen(levelId: levelId, isDaily: isDaily),
           settings,

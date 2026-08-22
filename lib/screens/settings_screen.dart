@@ -60,6 +60,8 @@ class SettingsScreen extends StatelessWidget {
 
     if (confirmed ?? false) {
       await Services.progress.resetAll();
+      // Сброс прогресса обнуляет и боссов: попытки, блокировку и рекорды.
+      await Services.boss.resetAll();
     }
   }
 
