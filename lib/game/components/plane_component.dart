@@ -20,7 +20,12 @@ class PlaneComponent extends Component {
   final AirportGame game;
   final PlaneSpec spec;
 
-  static const double speedCellsPerSecond = 2.3;
+  /// Базовая скорость. Способность борта (например «Afterburner»)
+  /// умножает её - у скинов без способности множитель 1.0, и полёт
+  /// остаётся точно таким, каким был до способностей.
+  static const double baseSpeedCellsPerSecond = 2.3;
+  double get _speedCellsPerSecond =>
+      baseSpeedCellsPerSecond * game.ability.speedMultiplier;
   static const double turnRate = 7.0;
 
   List<GridPos> _route = const <GridPos>[];
@@ -38,11 +43,19 @@ class PlaneComponent extends Component {
 
   // Кисти создаются один раз: цвет борта не меняется, а render()
   // вызывается 60 раз в секунду для каждого самолёта.
-  final Paint _shadowPaint = Paint()..color = const Color(0x4D000000);
+  //
+  // Тень - с мягким размытием (MaskFilter), а не жёстким силуэтом:
+  // настраивается один раз на Paint и дальше ничего не стоит на кадр,
+  // но борт визуально отрывается от подложки, как глянцевая игрушка,
+  // а не плоская наклейка.
+  final Paint _shadowPaint = Paint()
+    ..color = const Color(0x4D000000)
+    ..maskFilter = const MaskFilter.blur(BlurStyle.normal, 0.028);
   final Paint _bodyPaint = Paint();
   final Paint _wingPaint = Paint();
   final Paint _tailPaint = Paint();
   final Paint _glossPaint = Paint();
+  final Paint _wingGlossPaint = Paint();
   final Paint _detailPaint = Paint();
   final Paint _glowPaint = Paint()
     ..style = PaintingStyle.stroke
@@ -52,6 +65,13 @@ class PlaneComponent extends Component {
   final Paint _propDisc = Paint()..color = const Color(0x2EFFFFFF);
   final Paint _propHub = Paint()..color = const Color(0xFF20364C);
   final Paint _cockpitPaint = Paint()..color = const Color(0xCC0E2439);
+
+  /// Блик на фонаре кабины: маленький светлый штрих поверх тёмного
+  /// стекла, чтобы кабина читалась как остекление, а не как заглушка.
+  /// Прямоугольник считается один раз в onLoad из реальных границ
+  /// Path кабины конкретного скина - не захардкожен под один силуэт.
+  final Paint _cockpitGlossPaint = Paint()..color = const Color(0x8CFFFFFF);
+  Rect _cockpitHighlight = Rect.zero;
 
   /// Рант по корпусу: тонкая светлая линия сверху даёт ощущение
   /// металла и отделяет борт от подложки.
@@ -69,6 +89,19 @@ class PlaneComponent extends Component {
     ..strokeWidth = 0.035
     ..color = const Color(0x66001528);
 
+  /// Маршевый факел ракет - крупнее и вытянутее декоративного exhaust
+  /// у glow-бортов. Форма готовится один раз и переиспользуется всеми
+  /// самолётами: масштаб и цвет варьируются трансформацией канвы
+  /// и заранее собранными кистями, а не пересборкой Path в кадре.
+  static final Path _thrusterShape = Path()
+    ..moveTo(-0.09, 0)
+    ..quadraticBezierTo(-0.03, 0.22, 0, 0.34)
+    ..quadraticBezierTo(0.03, 0.22, 0.09, 0)
+    ..close();
+  final Paint _thrusterOuterPaint = Paint();
+  final Paint _thrusterCorePaint = Paint()..color = const Color(0xFFFFF6D8);
+  bool _hasThruster = false;
+
   PlaneSkin get skin => game.skin;
 
   bool get isFlying => _launched && !arrived;
@@ -81,14 +114,15 @@ class PlaneComponent extends Component {
 
     final Color base = color;
     // Градиент поперёк фюзеляжа: светлая грань, собственный цвет,
-    // теневая грань. Даёт объём вместо плоской заливки.
+    // теневая грань. Даёт объём вместо плоской заливки. Светлая грань
+    // взята чуть ярче прежнего - глянцевый пластик, а не матовая эмаль.
     _bodyPaint.shader = LinearGradient(
       begin: Alignment.centerLeft,
       end: Alignment.centerRight,
       colors: <Color>[
-        _lighten(base, 1.28),
+        _lighten(base, 1.38),
         base,
-        _shade(base, 0.68),
+        _shade(base, 0.64),
       ],
       stops: const <double>[0.0, 0.45, 1.0],
     ).createShader(const Rect.fromLTWH(-0.20, -0.55, 0.40, 1.10));
@@ -98,12 +132,34 @@ class PlaneComponent extends Component {
       begin: Alignment.centerLeft,
       end: Alignment.centerRight,
       colors: <Color>[
-        _lighten(_shade(base, 0.86), 1.16),
+        _lighten(_shade(base, 0.86), 1.22),
         _shade(base, 0.80),
-        _shade(base, 0.60),
+        _shade(base, 0.56),
       ],
       stops: const <double>[0.0, 0.5, 1.0],
     ).createShader(const Rect.fromLTWH(-0.58, -0.20, 1.16, 0.80));
+
+    // Тот же блик, что и на корпусе, только растянут по размаху крыла -
+    // без него крыло выглядит тусклее фюзеляжа даже при одинаковой краске.
+    _wingGlossPaint.shader = const LinearGradient(
+      begin: Alignment.topCenter,
+      end: Alignment.bottomCenter,
+      colors: <Color>[
+        Color(0x4DFFFFFF),
+        Color(0x00FFFFFF),
+      ],
+    ).createShader(const Rect.fromLTWH(-0.58, -0.20, 1.16, 0.30));
+
+    // Блик на кабине - маленький штрих в верхне-левой четверти реальных
+    // границ Path кабины, посчитанных один раз для этого конкретного
+    // скина. getBounds() не бесплатен, но вызывается только здесь.
+    final Rect cb = skin.cockpit.getBounds();
+    _cockpitHighlight = Rect.fromLTWH(
+      cb.left + cb.width * 0.16,
+      cb.top + cb.height * 0.12,
+      cb.width * 0.34,
+      cb.height * 0.30,
+    );
 
     _tailPaint.color = _shade(base, 0.72);
     _detailPaint.color = _shade(base, 0.62).withOpacity(skin.detailOpacity);
@@ -121,6 +177,22 @@ class PlaneComponent extends Component {
       ).createShader(
         Rect.fromCircle(center: const Offset(0, 0.62), radius: 0.26),
       );
+    }
+
+    // Факел ракеты готовится тем же приёмом: цвет привязан к базовому
+    // цвету борта (тому же, что красит корпус), а не жёстко зашит.
+    _hasThruster = skin.thruster;
+    if (_hasThruster) {
+      _thrusterOuterPaint.shader = LinearGradient(
+        begin: Alignment.topCenter,
+        end: Alignment.bottomCenter,
+        colors: <Color>[
+          _lighten(base, 1.4).withOpacity(0.95),
+          base.withOpacity(0.55),
+          base.withOpacity(0.0),
+        ],
+        stops: const <double>[0.0, 0.5, 1.0],
+      ).createShader(const Rect.fromLTWH(-0.09, 0, 0.18, 0.34));
     }
 
     _glossPaint.shader = const LinearGradient(
@@ -164,7 +236,7 @@ class PlaneComponent extends Component {
   void advance(double dt) {
     if (!_launched || arrived) return;
     final double maxTraveled = (_route.length - 1).toDouble();
-    _traveled += speedCellsPerSecond * dt;
+    _traveled += _speedCellsPerSecond * dt;
     if (_traveled >= maxTraveled) {
       _traveled = maxTraveled;
       arrived = true;
@@ -255,6 +327,11 @@ class PlaneComponent extends Component {
     canvas.drawPath(s.tail, _tailPaint);
     canvas.drawPath(s.wings, _wingPaint);
     canvas.drawPath(s.wings, _outlinePaint);
+    // Рант и блик теперь и на крыле - раньше только корпус выглядел
+    // глянцевым, а крыло рядом с ним казалось плоской деталью.
+    canvas.drawPath(s.wings, _rimPaint);
+    canvas.drawPath(s.wings, _wingGlossPaint);
+    canvas.drawPath(s.tail, _rimPaint);
 
     final Path? details = s.details;
     if (details != null) canvas.drawPath(details, _detailPaint);
@@ -268,6 +345,7 @@ class PlaneComponent extends Component {
         _exhaustPaint,
       );
     }
+    if (_hasThruster && _launched && !arrived) _paintThruster(canvas);
 
     canvas.drawPath(s.body, _bodyPaint);
     canvas.drawPath(s.body, _outlinePaint);
@@ -276,6 +354,9 @@ class PlaneComponent extends Component {
     canvas.drawPath(s.body, _glossPaint);
     canvas.drawPath(s.body, _rimPaint);
     canvas.drawPath(s.cockpit, _cockpitPaint);
+    // Штрих на стекле - маленький, поэтому не нуждается в клипе:
+    // прямоугольник заранее посчитан внутри границ самой кабины.
+    canvas.drawOval(_cockpitHighlight, _cockpitGlossPaint);
 
     if (s.propeller) _paintPropeller(canvas);
     if (s.rotor) _paintRotor(canvas);
@@ -340,6 +421,27 @@ class PlaneComponent extends Component {
     canvas.restore();
 
     canvas.drawCircle(hub, 0.055, _propHub);
+  }
+
+  /// Факел маршевого двигателя: вытянутая капля из хвоста, чуть
+  /// подрагивающая по длине и ширине - как настоящее горение, а не
+  /// статичный треугольник. Форма одна на всех, масштаб и позиция
+  /// у трансформации канвы, поэтому в кадре не аллоцируется ничего.
+  void _paintThruster(Canvas canvas) {
+    final double flicker =
+        0.82 + 0.14 * math.sin(_idle * 22) + 0.06 * math.sin(_idle * 47 + 1.7);
+
+    canvas.save();
+    canvas.translate(0, 0.44);
+    canvas.scale(0.85 + 0.15 * flicker, flicker);
+    canvas.drawPath(_thrusterShape, _thrusterOuterPaint);
+
+    canvas.save();
+    canvas.scale(0.5, 0.68);
+    canvas.drawPath(_thrusterShape, _thrusterCorePaint);
+    canvas.restore();
+
+    canvas.restore();
   }
 
   static Color _lighten(Color c, double factor) => Color.fromARGB(

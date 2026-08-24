@@ -1,3 +1,4 @@
+import 'dart:async';
 import 'dart:math' as math;
 
 import 'package:flutter/material.dart';
@@ -17,14 +18,40 @@ import '../widgets/game_button.dart';
 import '../widgets/responsive_center.dart';
 import '../widgets/screen_header.dart';
 
-
 /// MY AIRPORT: долгосрочная ветка развития.
 ///
 /// Переиспользует существующие монеты, владение скинами/темами и весь
 /// набор виджетов. Своя здесь только картинка аэропорта - она рисуется
 /// кодом в палитре текущей темы, как и всё остальное в игре.
-class MyAirportScreen extends StatelessWidget {
+///
+/// Раньше экран был статичным: доход раз в сутки не требовал живого
+/// отсчёта. Теперь доход собирается каждые пять минут, и экран тикает
+/// раз в секунду, пока открыт - тем же приёмом, что и таймер блокировки
+/// босса, - чтобы обратный отсчёт до следующего сбора шёл на глазах,
+/// а не замирал до следующего касания экрана.
+class MyAirportScreen extends StatefulWidget {
   const MyAirportScreen({super.key});
+
+  @override
+  State<MyAirportScreen> createState() => _MyAirportScreenState();
+}
+
+class _MyAirportScreenState extends State<MyAirportScreen> {
+  Timer? _ticker;
+
+  @override
+  void initState() {
+    super.initState();
+    _ticker = Timer.periodic(const Duration(seconds: 1), (_) {
+      if (mounted) setState(() {});
+    });
+  }
+
+  @override
+  void dispose() {
+    _ticker?.cancel();
+    super.dispose();
+  }
 
   Future<void> _upgrade(BuildContext context) async {
     final int before = Services.progress.airportLevel;
@@ -59,7 +86,7 @@ class MyAirportScreen extends StatelessWidget {
 
     showDialog<void>(
       context: context,
-      barrierColor: Colors.black.withOpacity(0.66),
+      barrierColor: Colors.black.withValues(alpha: 0.66),
       builder: (BuildContext context) => Dialog(
         backgroundColor: Colors.transparent,
         elevation: 0,
@@ -85,7 +112,8 @@ class MyAirportScreen extends StatelessWidget {
               ),
               if (reward != null) ...<Widget>[
                 const SizedBox(height: 16),
-                Container(height: 1, color: p.panelBorder.withOpacity(0.4)),
+                Container(
+                    height: 1, color: p.panelBorder.withValues(alpha: 0.4)),
                 const SizedBox(height: 16),
                 Icon(
                   isSkin ? Icons.flight_rounded : Icons.map_rounded,
@@ -140,8 +168,12 @@ class MyAirportScreen extends StatelessWidget {
                   Expanded(
                     child: ResponsiveCenter(
                       child: unlocked
-                          ? _UnlockedBody(onUpgrade: () => _upgrade(context),
-                              onClaim: () => _claim(context))
+                          ? _UnlockedBody(
+                              onUpgrade: () => _upgrade(context),
+                              onClaim: () => _claim(context),
+                              incomeSecondsLeft:
+                                  Services.progress.airportIncomeSecondsLeft,
+                            )
                           : const _LockedBody(),
                     ),
                   ),
@@ -173,13 +205,13 @@ class _LockedBody extends StatelessWidget {
         Stack(
           alignment: Alignment.center,
           children: <Widget>[
-            Opacity(opacity: 0.35, child: _AirportView(level: 8)),
+            const Opacity(opacity: 0.35, child: _AirportView(level: 8)),
             Container(
               padding: const EdgeInsets.all(18),
               decoration: BoxDecoration(
                 shape: BoxShape.circle,
-                color: Colors.black.withOpacity(0.45),
-                border: Border.all(color: p.panelBorder.withOpacity(0.7)),
+                color: Colors.black.withValues(alpha: 0.45),
+                border: Border.all(color: p.panelBorder.withValues(alpha: 0.7)),
               ),
               child: Icon(Icons.lock_rounded, size: 40, color: p.textSecondary),
             ),
@@ -216,7 +248,7 @@ class _LockedBody extends StatelessWidget {
                 child: LinearProgressIndicator(
                   value: ratio,
                   minHeight: 12,
-                  backgroundColor: Colors.black.withOpacity(0.32),
+                  backgroundColor: Colors.black.withValues(alpha: 0.32),
                   valueColor: AlwaysStoppedAnimation<Color>(p.success.top),
                 ),
               ),
@@ -234,12 +266,26 @@ class _LockedBody extends StatelessWidget {
   }
 }
 
+/// «3:47» - формат отсчёта до следующего сбора дохода.
+String _formatCountdown(int seconds) {
+  final int m = seconds ~/ 60;
+  final int s = seconds % 60;
+  return '$m:${s.toString().padLeft(2, '0')}';
+}
+
 /// Открытый аэропорт: строим и получаем доход.
 class _UnlockedBody extends StatelessWidget {
-  const _UnlockedBody({required this.onUpgrade, required this.onClaim});
+  const _UnlockedBody({
+    required this.onUpgrade,
+    required this.onClaim,
+    required this.incomeSecondsLeft,
+  });
 
   final VoidCallback onUpgrade;
   final VoidCallback onClaim;
+
+  /// 0, если сбор уже доступен - иначе живой отсчёт до него.
+  final int incomeSecondsLeft;
 
   @override
   Widget build(BuildContext context) {
@@ -296,7 +342,7 @@ class _UnlockedBody extends StatelessWidget {
                   child: LinearProgressIndicator(
                     value: (Services.progress.coins / cost).clamp(0.0, 1.0),
                     minHeight: 10,
-                    backgroundColor: Colors.black.withOpacity(0.32),
+                    backgroundColor: Colors.black.withValues(alpha: 0.32),
                     valueColor: AlwaysStoppedAnimation<Color>(
                       canPay ? p.success.top : p.secondary.top,
                     ),
@@ -320,8 +366,7 @@ class _UnlockedBody extends StatelessWidget {
                           ),
                           Text(
                             tr(AirportEvolution.buildKeyFor(level + 1)),
-                            style:
-                                AppText.label.copyWith(color: p.textPrimary),
+                            style: AppText.label.copyWith(color: p.textPrimary),
                           ),
                         ],
                       ),
@@ -354,8 +399,7 @@ class _UnlockedBody extends StatelessWidget {
                 child: GameButton(
                   label: tr('upgrade'),
                   icon: Icons.construction_rounded,
-                  kind:
-                      canPay ? GameButtonKind.primary : GameButtonKind.locked,
+                  kind: canPay ? GameButtonKind.primary : GameButtonKind.locked,
                   height: 56,
                   textStyle: AppText.buttonSmall,
                   onPressed: canPay ? onUpgrade : null,
@@ -365,8 +409,8 @@ class _UnlockedBody extends StatelessWidget {
             Expanded(
               child: GameButton(
                 label: incomeReady
-                    ? '${tr('collect')}  ${Services.progress.airportDailyIncome}'
-                    : tr('collected_today'),
+                    ? '${tr('collect')}  ${Services.progress.airportClaimAmount}'
+                    : _formatCountdown(incomeSecondsLeft),
                 icon: Icons.savings_rounded,
                 kind: incomeReady
                     ? GameButtonKind.success
@@ -423,9 +467,8 @@ class _RecentReward extends StatelessWidget {
     final AirportReward reward = AirportEvolution.rewardFor(found)!;
     final bool isSkin = reward.skinId != null;
     final String id = (isSkin ? reward.skinId : reward.themeId)!;
-    final String nameKey = isSkin
-        ? PlaneSkins.byId(id).nameKey
-        : BoardThemes.byId(id).nameKey;
+    final String nameKey =
+        isSkin ? PlaneSkins.byId(id).nameKey : BoardThemes.byId(id).nameKey;
     final bool equipped = isSkin
         ? Services.progress.equippedSkin == id
         : Services.progress.equippedTheme == id;
@@ -452,8 +495,8 @@ class _RecentReward extends StatelessWidget {
                   decoration: BoxDecoration(
                     borderRadius: BorderRadius.circular(12),
                     gradient: p.primary.gradient,
-                    border:
-                        Border.all(color: p.primary.border.withOpacity(0.5)),
+                    border: Border.all(
+                        color: p.primary.border.withValues(alpha: 0.5)),
                   ),
                   child: Icon(
                     isSkin ? Icons.flight_rounded : Icons.map_rounded,
@@ -472,8 +515,7 @@ class _RecentReward extends StatelessWidget {
                       ),
                       Text(
                         tr(isSkin ? 'exclusive_plane' : 'exclusive_zone'),
-                        style:
-                            AppText.caption.copyWith(color: p.textMuted),
+                        style: AppText.caption.copyWith(color: p.textMuted),
                       ),
                     ],
                   ),
@@ -481,13 +523,11 @@ class _RecentReward extends StatelessWidget {
                 if (equipped)
                   Row(
                     children: <Widget>[
-                      Icon(Icons.check_rounded,
-                          size: 16, color: p.success.top),
+                      Icon(Icons.check_rounded, size: 16, color: p.success.top),
                       const SizedBox(width: 4),
                       Text(
                         tr('equipped_short'),
-                        style:
-                            AppText.caption.copyWith(color: p.success.top),
+                        style: AppText.caption.copyWith(color: p.success.top),
                       ),
                     ],
                   ),
@@ -595,8 +635,7 @@ class _AirportViewState extends State<_AirportView>
 
   @override
   Widget build(BuildContext context) {
-    final BoardTheme theme =
-        BoardThemes.byId(Services.progress.equippedTheme);
+    final BoardTheme theme = BoardThemes.byId(Services.progress.equippedTheme);
 
     return RepaintBoundary(
       child: ClipRRect(
@@ -768,8 +807,8 @@ class _AirportPainter extends CustomPainter {
     );
   }
 
-  void _paintPart(Canvas canvas, double tile, Offset o, AirportBuilding b,
-      double grow) {
+  void _paintPart(
+      Canvas canvas, double tile, Offset o, AirportBuilding b, double grow) {
     if (grow <= 0.01) return;
     final double gx = b.gx.toDouble();
     final double gy = b.gy.toDouble();
@@ -835,7 +874,7 @@ class _AirportPainter extends CustomPainter {
 
       case AirportPart.lights:
         // Огни вдоль главной полосы.
-        final Paint glow = Paint()..color = theme.beacon.withOpacity(0.9);
+        final Paint glow = Paint()..color = theme.beacon.withValues(alpha: 0.9);
         for (int i = 0; i < 9; i++) {
           canvas.drawCircle(
             _iso(i + 0.5, 7.85, 0.1, tile, o),

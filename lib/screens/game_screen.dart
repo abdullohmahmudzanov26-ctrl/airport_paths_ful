@@ -57,6 +57,11 @@ class _GameScreenState extends State<GameScreen> with WidgetsBindingObserver {
   LevelResult? _result;
   List<Achievement> _freshAchievements = const <Achievement>[];
 
+  /// «Executive Perk» (бизнес-джет): первая подсказка на уровне
+  /// ничего не стоит. Флаг живёт здесь, а не в сервисе - это разовая
+  /// льгота на заход, а не сохраняемый ресурс.
+  bool _freeHintSpent = false;
+
   /// Тикает раз в секунду и копит время активной игры.
   /// Останавливается на паузе, на экране победы и при сворачивании
   /// (жизненный цикл уже ставит паузу), поэтому фон не засчитывается.
@@ -77,12 +82,14 @@ class _GameScreenState extends State<GameScreen> with WidgetsBindingObserver {
         : LevelRepository.level(widget.levelId);
     _game = AirportGame(
       level: _level,
-      theme: widget.isDaily
-          ? BoardThemes.byId(Services.progress.equippedTheme)
-          : BoardThemes.forLevel(
-              widget.levelId,
-              Services.progress.equippedTheme,
-            ),
+      // Раньше орбитальная и EVENT-зона (101+, 151+) навязывали свою
+      // тему насильно, игнорируя выбор игрока - купленные в магазине
+      // темы становились бесполезны на этих уровнях. Теперь тема
+      // всегда та, что игрок экипировал, а orbital/volcanic просто
+      // выдаются в собственность бесплатно при достижении уровня
+      // (см. ProgressService.completeLevel) - как обычные темы,
+      // которые можно надеть или снять по желанию.
+      theme: BoardThemes.byId(Services.progress.equippedTheme),
       skin: PlaneSkins.byId(Services.progress.equippedSkin),
       onLevelComplete: _handleWin,
       onCrash: _handleCrash,
@@ -145,6 +152,7 @@ class _GameScreenState extends State<GameScreen> with WidgetsBindingObserver {
     setState(() {
       _result = null;
       _freshAchievements = const <Achievement>[];
+      _freeHintSpent = false;
     });
     _game.resetLevel();
     _setPaused(false);
@@ -165,6 +173,9 @@ class _GameScreenState extends State<GameScreen> with WidgetsBindingObserver {
     bool isNewBest;
     bool questJustCompleted = false;
     List<Achievement> fresh = const <Achievement>[];
+    // Заполняется, только когда именно этот забег принёс бесплатную
+    // локацию (уровень 100 - орбита, уровень 150 - EVENT-зона).
+    String? zoneThemeGranted;
 
     if (widget.isDaily) {
       // Рейс дня живёт отдельно: он не открывает уровни и не пишет
@@ -172,13 +183,17 @@ class _GameScreenState extends State<GameScreen> with WidgetsBindingObserver {
       coins = await Services.progress.completeDaily(stars: stars);
       isNewBest = false;
     } else {
-      final int computedCoins =
-          ScoringSystem.coins(stars: stars, levelId: _level.id);
+      final int computedCoins = _game.ability.applyCoinBonus(
+        ScoringSystem.coins(stars: stars, levelId: _level.id),
+      );
       final int previousBest = Services.progress.bestTime(_level.id);
       isNewBest = previousBest == 0 || seconds < previousBest;
 
-      final ({List<Achievement> achievements, int coinsAwarded}) result =
-          await Services.progress.completeLevel(
+      final ({
+        List<Achievement> achievements,
+        int coinsAwarded,
+        String? zoneThemeGranted,
+      }) result = await Services.progress.completeLevel(
         levelId: _level.id,
         stars: stars,
         seconds: seconds,
@@ -191,6 +206,7 @@ class _GameScreenState extends State<GameScreen> with WidgetsBindingObserver {
       // повторном прохождении, а не расчётную сумму по звёздам.
       coins = result.coinsAwarded;
       fresh = result.achievements;
+      zoneThemeGranted = result.zoneThemeGranted;
 
       // Задание проверяется один раз, в момент победы - не каждый
       // кадр. completeQuest сам идемпотентен, повторно не заплатит.
@@ -244,9 +260,16 @@ class _GameScreenState extends State<GameScreen> with WidgetsBindingObserver {
         context: context,
         barrierDismissible: false,
         barrierColor: Colors.black.withValues(alpha: 0.85),
-        builder: (BuildContext context) =>
-            SuperMilestoneOverlay(milestone: milestone!),
+        builder: (BuildContext context) => SuperMilestoneOverlay(
+          milestone: milestone!,
+          grantedThemeId: zoneThemeGranted,
+        ),
       );
+    } else if (zoneThemeGranted != null && mounted) {
+      // На случай редкого расхождения между вехой и порогом уровня -
+      // локация всё равно не должна достаться молча, без уведомления.
+      final String name = tr(BoardThemes.byId(zoneThemeGranted).nameKey);
+      _toast('${tr('zone_unlocked_toast')} $name', Icons.map_rounded);
     }
   }
 
@@ -282,6 +305,18 @@ class _GameScreenState extends State<GameScreen> with WidgetsBindingObserver {
       _toast(tr('feat_nohint_toast'), Icons.block_rounded);
       return;
     }
+
+    // «Executive Perk»: первая подсказка на уровне не тратит запас.
+    // Проверяется до spendHint - иначе льгота списала бы обычную
+    // подсказку впустую.
+    if (_game.ability.freeHint && !_freeHintSpent) {
+      _freeHintSpent = true;
+      _game.applyHint();
+      _toast(tr('toast_free_hint'), Icons.lightbulb_rounded);
+      setState(() {});
+      return;
+    }
+
     final bool paid = await Services.progress.spendHint();
     if (!paid) {
       // Подсказки кончились - предлагаем ролик, а не тупик.

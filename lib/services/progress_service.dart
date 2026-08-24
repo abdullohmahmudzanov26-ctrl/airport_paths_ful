@@ -33,7 +33,11 @@ class ProgressService extends ChangeNotifier {
   int _dailyStars = 0;
   int _dailyReward = 0;
   int _airportLevel = 0;
-  int _airportIncomeDay = 0;
+
+  /// Момент последнего сбора дохода в миллисекундах эпохи - было
+  /// «какой день», стало «когда именно», потому что забирать теперь
+  /// можно каждые пять минут, а не раз в сутки.
+  int _airportIncomeClaimedAt = 0;
   int _playSeconds = 0;
 
   // Счётчики считаются один раз и обновляются при изменениях:
@@ -97,7 +101,8 @@ class ProgressService extends ChangeNotifier {
     _airportLevel = _storage
         .getInt(StorageKeys.airportLevel, 0)
         .clamp(0, AirportEvolution.maxLevel);
-    _airportIncomeDay = _storage.getInt(StorageKeys.airportIncomeDay, 0);
+    _airportIncomeClaimedAt =
+        _storage.getInt(StorageKeys.airportIncomeClaimedAt, 0);
     _playSeconds = _storage.getInt(StorageKeys.playSeconds, 0);
 
     _recountStats();
@@ -180,8 +185,15 @@ class ProgressService extends ChangeNotifier {
   /// Записывает результат уровня и возвращает достижения,
   /// которые открылись именно сейчас - их показывает экран победы.
   /// achievements - новые награды, coinsAwarded - монеты, реально
-  /// зачисленные за этот забег (0 при повторном прохождении).
-  Future<({List<Achievement> achievements, int coinsAwarded})> completeLevel({
+  /// зачисленные за этот забег (0 при повторном прохождении),
+  /// zoneThemeGranted - id темы новой локации, если она досталась
+  /// бесплатно именно за этот забег (иначе null).
+  Future<
+      ({
+        List<Achievement> achievements,
+        int coinsAwarded,
+        String? zoneThemeGranted,
+      })> completeLevel({
     required int levelId,
     required int stars,
     required int seconds,
@@ -228,6 +240,23 @@ class ProgressService extends ChangeNotifier {
       _unlocked = levelId + 1;
       await _storage.setInt(StorageKeys.unlockedLevel, _unlocked);
     }
+
+    // Орбитальная зона (101+) и EVENT-зона (151+) раньше НАВЯЗЫВАЛИ
+    // свою тему насильно, что бы ни было экипировано - купленные темы
+    // становились бесполезны на этих уровнях. Теперь вместо принуждения
+    // игрок получает саму тему В СОБСТВЕННОСТЬ бесплатно ровно один раз,
+    // при первом прохождении уровня-порога, а носить её или нет -
+    // решает сам, как и любую другую тему из магазина.
+    String? zoneThemeGranted;
+    if (levelId == LevelRepository.orbitalFrom - 1 &&
+        !ownsTheme(BoardThemes.orbital.id)) {
+      await _grantTheme(BoardThemes.orbital.id);
+      zoneThemeGranted = BoardThemes.orbital.id;
+    } else if (levelId == LevelRepository.eventFrom - 1 &&
+        !ownsTheme(BoardThemes.volcanic.id)) {
+      await _grantTheme(BoardThemes.volcanic.id);
+      zoneThemeGranted = BoardThemes.volcanic.id;
+    }
     await _storage.setInt(StorageKeys.currentLevel, levelId);
 
     if (coinsAwarded > 0) {
@@ -246,7 +275,11 @@ class ProgressService extends ChangeNotifier {
     _recountStats();
     final List<Achievement> fresh = await _checkAchievements();
     notifyListeners();
-    return (achievements: fresh, coinsAwarded: coinsAwarded);
+    return (
+      achievements: fresh,
+      coinsAwarded: coinsAwarded,
+      zoneThemeGranted: zoneThemeGranted,
+    );
   }
 
   Future<List<Achievement>> _checkAchievements() async {
@@ -357,13 +390,28 @@ class ProgressService extends ChangeNotifier {
   int get airportUpgradeCost =>
       airportMaxed ? 0 : AirportEvolution.costFor(_airportLevel + 1);
 
-  int get airportDailyIncome => AirportEvolution.incomeFor(_airportLevel);
+  /// Сумма одного сбора. Название без «daily» - теперь это не сутки,
+  /// а разовая прибавка за клейм.
+  int get airportClaimAmount => AirportEvolution.incomeFor(_airportLevel);
 
-  /// Доход можно забрать раз в сутки и только при построенном аэропорте.
+  /// Доход можно забрать раз в пять минут и только при построенном
+  /// аэропорте.
   bool get airportIncomeReady =>
       airportUnlocked &&
       _airportLevel > 0 &&
-      _airportIncomeDay != DailyFlight.todayKey();
+      _msSinceClaim >= AirportEvolution.incomeIntervalSeconds * 1000;
+
+  /// Сколько секунд осталось до следующего сбора. 0, если уже можно
+  /// забирать - экран показывает либо кнопку, либо этот отсчёт.
+  int get airportIncomeSecondsLeft {
+    if (!airportUnlocked || _airportLevel <= 0) return 0;
+    final int leftMs =
+        AirportEvolution.incomeIntervalSeconds * 1000 - _msSinceClaim;
+    return leftMs <= 0 ? 0 : (leftMs / 1000).ceil();
+  }
+
+  int get _msSinceClaim =>
+      DateTime.now().millisecondsSinceEpoch - _airportIncomeClaimedAt;
 
   /// Апгрейд за монеты. Возвращает награду, если ступень оказалась
   /// вехой, иначе null. false-случай (не хватило монет) отличается
@@ -390,13 +438,16 @@ class ProgressService extends ChangeNotifier {
     return reward;
   }
 
-  /// Забрать пассивный доход. Возвращает 0, если сегодня уже забирали.
+  /// Забрать доход. Возвращает 0, если пятиминутка ещё не прошла.
   Future<int> claimAirportIncome() async {
     if (!airportIncomeReady) return 0;
-    final int amount = airportDailyIncome;
-    _airportIncomeDay = DailyFlight.todayKey();
+    final int amount = airportClaimAmount;
+    _airportIncomeClaimedAt = DateTime.now().millisecondsSinceEpoch;
     _coins += amount;
-    await _storage.setInt(StorageKeys.airportIncomeDay, _airportIncomeDay);
+    await _storage.setInt(
+      StorageKeys.airportIncomeClaimedAt,
+      _airportIncomeClaimedAt,
+    );
     await _storage.setInt(StorageKeys.coins, _coins);
     await _checkAchievements();
     notifyListeners();
@@ -610,12 +661,12 @@ class ProgressService extends ChangeNotifier {
     _dailyStars = 0;
     _dailyReward = 0;
     _airportLevel = 0;
-    _airportIncomeDay = 0;
+    _airportIncomeClaimedAt = 0;
     _coinsBonusDay = 0;
     _doubleRewardArmed = false;
     _playSeconds = 0;
     await _storage.setInt(StorageKeys.airportLevel, 0);
-    await _storage.setInt(StorageKeys.airportIncomeDay, 0);
+    await _storage.setInt(StorageKeys.airportIncomeClaimedAt, 0);
     await _storage.setInt(StorageKeys.coinsDailyBonusDay, 0);
     await _storage.setBool(StorageKeys.doubleRewardArmed, false);
     await _storage.setInt(StorageKeys.playSeconds, 0);

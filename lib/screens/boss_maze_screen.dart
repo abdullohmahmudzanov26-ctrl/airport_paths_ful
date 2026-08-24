@@ -1,19 +1,24 @@
 import 'dart:async';
+import 'dart:math' as math;
 
 import 'package:flame/game.dart';
 import 'package:flutter/material.dart';
 
 import '../app/routes.dart';
 import '../data/app_strings.dart';
+import '../data/board_themes.dart';
 import '../data/boss_config.dart';
 import '../data/maze_generator.dart';
 import '../data/maze_themes.dart';
+import '../data/plane_abilities.dart';
 import '../data/plane_skins.dart';
 import '../data/level_repository.dart';
+import '../data/super_milestones.dart';
 import '../game/boss/boss_maze_game.dart';
 import '../models/achievement.dart';
 import '../models/boss_result.dart';
 import '../models/maze_data.dart';
+import '../models/plane_ability.dart';
 import '../services/audio_service.dart';
 import '../services/service_locator.dart';
 import '../theme/app_palette.dart';
@@ -25,6 +30,7 @@ import '../widgets/icon_plate_button.dart';
 import '../widgets/responsive_center.dart';
 import '../widgets/screen_header.dart';
 import '../widgets/stat_chip.dart';
+import '../widgets/super_milestone_overlay.dart';
 
 /// Что сейчас показывает экран.
 enum _Stage { intro, playing, paused, failed, locked, won }
@@ -53,6 +59,16 @@ class _BossMazeScreenState extends State<BossMazeScreen>
   late MazeSpec _maze;
   late MazeTheme _theme;
   late BossMazeGame _game;
+
+  /// Способность экипированного борта - живёт на экране, не в игре:
+  /// монеты и «прощённые» ошибки считает тот же слой, что и весь
+  /// остальной прогресс босса.
+  late PlaneAbility _ability;
+
+  /// Сколько ошибок ещё прощается без списания попытки в этом заходе -
+  /// «Barnstormer», «Full Steam», «Founder's Grace». Сбрасывается вместе
+  /// с картой: на новую случайную карту - новый запас прощения.
+  int _mercyLeft = 0;
 
   _Stage _stage = _Stage.intro;
   BossFailReason _failReason = BossFailReason.timeout;
@@ -113,18 +129,64 @@ class _BossMazeScreenState extends State<BossMazeScreen>
     }
   }
 
-  /// Новая карта: случайная тема, случайный лабиринт, проверенный
-  /// на проходимость генератором.
+  /// Карта и тема этого босса - зерно берётся из BossService и один раз
+  /// сохраняется там при первом входе на уровень. Раньше здесь звался
+  /// MazeGenerator.generate() без seed - значит, каждый вход на экран
+  /// (в том числе «вышел в меню и зашёл обратно») создавал новую
+  /// случайную карту. Теперь карта привязана к зерну уровня и не
+  /// меняется, пока игрок явно не перегенерирует её сам - разные боссы
+  /// (10, 20, 30…) всё так же получают разные карты, каждый свою.
   void _buildMaze() {
-    _maze = MazeGenerator.generate(bossIndex: _bossIndex);
-    _theme = MazeThemes.random();
+    final int seed = Services.boss.mazeSeed(widget.levelId);
+    _maze = MazeGenerator.generate(bossIndex: _bossIndex, seed: seed);
+    // Отдельный поток случайности от того же зерна - тема не влияет
+    // на генерацию лабиринта и не сбивает его собственную рандомизацию.
+    _theme = MazeThemes.random(math.Random(seed ^ 0x5EED));
+    _ability = PlaneAbilities.byId(Services.progress.equippedSkin);
+    _mercyLeft = _ability.mercyCharges;
     _game = BossMazeGame(
       maze: _maze,
       theme: _theme,
       skin: PlaneSkins.byId(Services.progress.equippedSkin),
+      ability: _ability,
       onWin: _handleWin,
       onFail: _handleFail,
+      onShieldUsed: _handleShieldUsed,
     );
+  }
+
+  void _handleShieldUsed() {
+    _toast(tr('boss_shield_used'), Icons.shield_rounded);
+  }
+
+  void _toast(String message, IconData icon) {
+    if (!mounted) return;
+    final AppPalette p = context.palette;
+    ScaffoldMessenger.of(context)
+      ..hideCurrentSnackBar()
+      ..showSnackBar(
+        SnackBar(
+          duration: const Duration(milliseconds: 1500),
+          backgroundColor: p.panel,
+          behavior: SnackBarBehavior.floating,
+          shape: RoundedRectangleBorder(
+            borderRadius: BorderRadius.circular(14),
+            side: BorderSide(color: p.panelBorder.withOpacity(0.6)),
+          ),
+          content: Row(
+            children: <Widget>[
+              Icon(icon, size: 18, color: p.star),
+              const SizedBox(width: 10),
+              Expanded(
+                child: Text(
+                  message,
+                  style: AppText.label.copyWith(color: p.textSecondary),
+                ),
+              ),
+            ],
+          ),
+        ),
+      );
   }
 
   // ------------------------------------------------------------- попытки
@@ -147,6 +209,20 @@ class _BossMazeScreenState extends State<BossMazeScreen>
   }
 
   Future<void> _handleFail(BossFailReason reason) async {
+    // «Barnstormer», «Full Steam», «Founder's Grace»: одна ошибка внутри
+    // текущего запаса попыток прощается - попытка не списывается,
+    // игрок просто начинает эту же попытку заново.
+    if (_mercyLeft > 0) {
+      _mercyLeft--;
+      if (!mounted) return;
+      setState(() {
+        _failReason = reason;
+        _stage = _Stage.failed;
+      });
+      _toast(tr('boss_mercy_used'), Icons.favorite_rounded);
+      return;
+    }
+
     final bool locked = await Services.boss.loseAttempt(widget.levelId);
     if (!mounted) return;
 
@@ -216,12 +292,21 @@ class _BossMazeScreenState extends State<BossMazeScreen>
     // полный запас: бонус и итоговый экран должны показать реальный
     // результат этого захода.
     final int attemptsAtWin = _attemptsLeft;
-    final int base = BossConfig.baseReward(_bossIndex);
-    final int timeBonus = BossConfig.timeBonus(secondsLeft);
-    final int attemptsBonus = BossConfig.attemptsBonus(attemptsAtWin);
 
-    final ({List<Achievement> achievements, int coinsAwarded}) progressResult =
-        await Services.progress.completeLevel(
+    // Бонус способности («Heavy Freight», «Golden Rush» и другие)
+    // применяется к каждой составляющей награды по отдельности - так
+    // сумма трёх строк на экране победы честно сходится с итогом.
+    final int base = _ability.applyCoinBonus(BossConfig.baseReward(_bossIndex));
+    final int timeBonus =
+        _ability.applyCoinBonus(BossConfig.timeBonus(secondsLeft));
+    final int attemptsBonus =
+        _ability.applyCoinBonus(BossConfig.attemptsBonus(attemptsAtWin));
+
+    final ({
+      List<Achievement> achievements,
+      int coinsAwarded,
+      String? zoneThemeGranted,
+    }) progressResult = await Services.progress.completeLevel(
       levelId: widget.levelId,
       stars: 3,
       seconds: seconds,
@@ -237,12 +322,27 @@ class _BossMazeScreenState extends State<BossMazeScreen>
     // фиксированная выплата.
     int coins = progressResult.coinsAwarded;
     if (coins == 0) {
-      coins = BossConfig.replayReward(_bossIndex);
+      coins = _ability.applyCoinBonus(BossConfig.replayReward(_bossIndex));
       await Services.progress.rewardCoins(coins);
     }
 
     await Services.boss.markCleared(widget.levelId, seconds);
     if (!mounted) return;
+
+    // Уровни 100 и 150 - это как раз боссы (кратны десяти), поэтому
+    // именно здесь, а не на обычном экране игры, чаще всего и
+    // срабатывает бесплатная выдача orbital/volcanic - и именно
+    // здесь раньше вообще не показывались никакие достижения после
+    // победы над боссом, зона утекала молча.
+    SuperMilestone? milestone;
+    for (final Achievement a in progressResult.achievements) {
+      final SuperMilestone? m = SuperMilestones.byAchievementId(a.id);
+      if (m != null) {
+        milestone = m;
+        break;
+      }
+    }
+    final String? zoneThemeGranted = progressResult.zoneThemeGranted;
 
     setState(() {
       _attemptsLeft = BossConfig.attempts;
@@ -260,6 +360,21 @@ class _BossMazeScreenState extends State<BossMazeScreen>
       );
       _stage = _Stage.won;
     });
+
+    if (milestone != null && mounted) {
+      await showDialog<void>(
+        context: context,
+        barrierDismissible: false,
+        barrierColor: Colors.black.withOpacity(0.85),
+        builder: (BuildContext context) => SuperMilestoneOverlay(
+          milestone: milestone!,
+          grantedThemeId: zoneThemeGranted,
+        ),
+      );
+    } else if (zoneThemeGranted != null && mounted) {
+      final String name = tr(BoardThemes.byId(zoneThemeGranted).nameKey);
+      _toast('${tr('zone_unlocked_toast')} $name', Icons.map_rounded);
+    }
   }
 
   void _openNextLevel() {
@@ -362,8 +477,9 @@ class _BossMazeScreenState extends State<BossMazeScreen>
                   BossIntroOverlay(
                     levelId: widget.levelId,
                     theme: _theme,
-                    timeLimit: _maze.timeLimit,
+                    timeLimit: _game.effectiveTimeLimit,
                     attemptsLeft: _attemptsLeft,
+                    ability: _ability,
                     onStart: _startAttempt,
                   ),
                 if (_stage == _Stage.paused)

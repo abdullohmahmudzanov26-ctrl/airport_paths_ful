@@ -6,11 +6,108 @@ import '../data/app_strings.dart';
 import '../data/boss_config.dart';
 import '../data/maze_themes.dart';
 import '../game/boss/boss_maze_game.dart';
+import '../models/plane_ability.dart';
 import '../theme/app_palette.dart';
 import '../theme/app_text_styles.dart';
 import 'animated_entrance.dart';
 import 'app_panel.dart';
 import 'game_button.dart';
+
+/// Иконка способности по значку. Модель ability ничего не знает про
+/// Flutter, поэтому сопоставление живёт здесь - единственном месте,
+/// где значок превращается в конкретную IconData.
+IconData abilityGlyphIcon(AbilityGlyph glyph) {
+  switch (glyph) {
+    case AbilityGlyph.speed:
+      return Icons.bolt_rounded;
+    case AbilityGlyph.coins:
+      return Icons.monetization_on_rounded;
+    case AbilityGlyph.shield:
+      return Icons.shield_rounded;
+    case AbilityGlyph.mercy:
+      return Icons.favorite_rounded;
+    case AbilityGlyph.radar:
+      return Icons.radar_rounded;
+    case AbilityGlyph.time:
+      return Icons.hourglass_bottom_rounded;
+    case AbilityGlyph.hint:
+      return Icons.lightbulb_rounded;
+    case AbilityGlyph.agile:
+      return Icons.compress_rounded;
+  }
+}
+
+/// Компактная карточка способности - одинаковая на заставке босса
+/// и в магазине скинов. Ничего не рисует, если способности нет.
+class AbilityBadge extends StatelessWidget {
+  const AbilityBadge({
+    super.key,
+    required this.ability,
+    this.compact = false,
+  });
+
+  final PlaneAbility ability;
+
+  /// Компактный вид - меньше отступов и мельче шрифт, чтобы влезть
+  /// в карточку магазина. Название и что именно даёт способность
+  /// показываются в ЛЮБОМ режиме - иначе игрок видит красивое имя
+  /// вроде «Nova Overdrive» и не понимает, за что платит.
+  final bool compact;
+
+  @override
+  Widget build(BuildContext context) {
+    if (ability.isNone) return const SizedBox.shrink();
+    final AppPalette p = context.palette;
+
+    return Container(
+      padding: EdgeInsets.symmetric(
+        horizontal: compact ? 8 : 12,
+        vertical: compact ? 4 : 8,
+      ),
+      decoration: BoxDecoration(
+        color: p.primary.top.withOpacity(0.14),
+        borderRadius: BorderRadius.circular(compact ? 8 : 12),
+        border: Border.all(color: p.primary.top.withOpacity(0.4)),
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        mainAxisSize: MainAxisSize.min,
+        children: <Widget>[
+          Row(
+            mainAxisSize: MainAxisSize.min,
+            children: <Widget>[
+              for (final AbilityGlyph g in ability.glyphs) ...<Widget>[
+                Icon(abilityGlyphIcon(g), size: compact ? 13 : 15, color: p.primary.top),
+                const SizedBox(width: 3),
+              ],
+              Flexible(
+                child: Text(
+                  tr(ability.nameKey!),
+                  maxLines: 1,
+                  overflow: TextOverflow.ellipsis,
+                  style: (compact ? AppText.caption : AppText.label)
+                      .copyWith(color: p.textPrimary),
+                ),
+              ),
+            ],
+          ),
+          if (ability.descriptionKey != null) ...<Widget>[
+            const SizedBox(height: 2),
+            Text(
+              tr(ability.descriptionKey!),
+              maxLines: compact ? 2 : null,
+              overflow: compact ? TextOverflow.ellipsis : TextOverflow.visible,
+              style: AppText.caption.copyWith(
+                color: p.textSecondary,
+                fontSize: compact ? 9.5 : 11,
+              ),
+            ),
+          ],
+        ],
+      ),
+    );
+  }
+}
 
 /// Полоска попыток: три огня, погасшие - потраченные.
 class BossAttemptDots extends StatelessWidget {
@@ -53,6 +150,7 @@ class BossIntroOverlay extends StatefulWidget {
     required this.timeLimit,
     required this.attemptsLeft,
     required this.onStart,
+    this.ability = PlaneAbility.none,
   });
 
   final int levelId;
@@ -60,6 +158,10 @@ class BossIntroOverlay extends StatefulWidget {
   final int timeLimit;
   final int attemptsLeft;
   final VoidCallback onStart;
+
+  /// Способность экипированного борта - показывается отдельной
+  /// карточкой, если она есть, и не занимает места, если её нет.
+  final PlaneAbility ability;
 
   @override
   State<BossIntroOverlay> createState() => _BossIntroOverlayState();
@@ -206,6 +308,15 @@ class _BossIntroOverlayState extends State<BossIntroOverlay>
                 ),
               ),
               const SizedBox(height: 20),
+              if (!widget.ability.isNone) ...<Widget>[
+                AnimatedEntrance(
+                  delay: const Duration(milliseconds: 380),
+                  duration: const Duration(milliseconds: 380),
+                  offset: const Offset(0, 0.14),
+                  child: AbilityBadge(ability: widget.ability),
+                ),
+                const SizedBox(height: 16),
+              ],
               AnimatedEntrance(
                 delay: const Duration(milliseconds: 420),
                 duration: const Duration(milliseconds: 380),

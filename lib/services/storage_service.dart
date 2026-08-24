@@ -28,7 +28,11 @@ class StorageKeys {
   static const String coinsDailyBonusDay = 'coins_daily_bonus_day';
   static const String doubleRewardArmed = 'double_reward_armed';
   static const String airportLevel = 'airport_level';
-  static const String airportIncomeDay = 'airport_income_day';
+
+  /// Заменил airport_income_day: теперь хранится момент сбора
+  /// в миллисекундах, а не номер дня - доход забирают каждые
+  /// пять минут, а не раз в сутки. Старый ключ больше не читается.
+  static const String airportIncomeClaimedAt = 'airport_income_claimed_at';
   static const String playSeconds = 'play_seconds';
   static const String firstRun = 'first_run';
 
@@ -38,6 +42,11 @@ class StorageKeys {
   static String bossLockUntil(int levelId) => 'boss_lock_until_$levelId';
   static String bossCleared(int levelId) => 'boss_cleared_$levelId';
   static String bossBestTime(int levelId) => 'boss_best_time_$levelId';
+
+  /// Зерно карты этого босса - генерируется один раз и запоминается,
+  /// чтобы повторный вход в тот же уровень видел ту же карту, а не
+  /// новую случайную при каждом заходе.
+  static String bossMazeSeed(int levelId) => 'boss_maze_seed_$levelId';
 
   static String stars(int levelId) => 'stars_$levelId';
   static String bestTime(int levelId) => 'best_time_$levelId';

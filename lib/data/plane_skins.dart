@@ -743,6 +743,205 @@ class PlaneSkins {
     detailOpacity: 0.75,
   );
 
+  // ---------------------------------------------------------- РАКЕТЫ
+  // «wings» здесь - хвостовые стабилизаторы, «tail» - контрастный
+  // носовой обтекатель: имена полей описывают, чем красится деталь
+  // в PlaneComponent, а не то, где она физически стоит на борту.
+
+  /// Разведчик: компактный корпус, тупой нос, две простые кили-стабилизатора.
+  static final PlaneSkin rocketScout = PlaneSkin(
+    id: 'rocket_scout',
+    nameKey: 'skin_rocket_scout',
+    price: 1300,
+    category: SkinCategory.rocket,
+    thruster: true,
+    body: Path()
+      ..moveTo(0, -0.52)
+      ..cubicTo(0.08, -0.42, 0.11, -0.22, 0.11, 0.00)
+      ..cubicTo(0.11, 0.20, 0.10, 0.34, 0.09, 0.42)
+      ..lineTo(-0.09, 0.42)
+      ..cubicTo(-0.10, 0.34, -0.11, 0.20, -0.11, 0.00)
+      ..cubicTo(-0.11, -0.22, -0.08, -0.42, 0, -0.52)
+      ..close(),
+    tail: Path()
+      ..moveTo(0, -0.52)
+      ..cubicTo(0.06, -0.44, 0.08, -0.36, 0.08, -0.30)
+      ..lineTo(-0.08, -0.30)
+      ..cubicTo(-0.08, -0.36, -0.06, -0.44, 0, -0.52)
+      ..close(),
+    wings: Path()
+      ..moveTo(0.09, 0.16)
+      ..lineTo(0.30, 0.44)
+      ..lineTo(0.21, 0.46)
+      ..lineTo(0.08, 0.30)
+      ..close()
+      ..moveTo(-0.09, 0.16)
+      ..lineTo(-0.30, 0.44)
+      ..lineTo(-0.21, 0.46)
+      ..lineTo(-0.08, 0.30)
+      ..close(),
+    cockpit: Path()..addOval(const Rect.fromLTWH(-0.045, -0.20, 0.09, 0.11)),
+    details: Path()
+      ..addRRect(RRect.fromRectAndRadius(
+        const Rect.fromLTWH(-0.11, 0.06, 0.22, 0.026),
+        const Radius.circular(0.01),
+      )),
+    detailOpacity: 0.5,
+  );
+
+  /// Рейдер: вытянутый узкий корпус, стреловидные кили.
+  static final PlaneSkin rocketRaider = PlaneSkin(
+    id: 'rocket_raider',
+    nameKey: 'skin_rocket_raider',
+    price: 2000,
+    category: SkinCategory.rocket,
+    thruster: true,
+    body: Path()
+      ..moveTo(0, -0.56)
+      ..cubicTo(0.06, -0.46, 0.09, -0.24, 0.09, 0.02)
+      ..cubicTo(0.09, 0.22, 0.085, 0.36, 0.075, 0.44)
+      ..lineTo(-0.075, 0.44)
+      ..cubicTo(-0.085, 0.36, -0.09, 0.22, -0.09, 0.02)
+      ..cubicTo(-0.09, -0.24, -0.06, -0.46, 0, -0.56)
+      ..close(),
+    tail: Path()
+      ..moveTo(0, -0.56)
+      ..cubicTo(0.05, -0.48, 0.065, -0.40, 0.065, -0.34)
+      ..lineTo(-0.065, -0.34)
+      ..cubicTo(-0.065, -0.40, -0.05, -0.48, 0, -0.56)
+      ..close(),
+    wings: Path()
+      ..moveTo(0.07, 0.08)
+      ..lineTo(0.34, 0.40)
+      ..lineTo(0.29, 0.46)
+      ..lineTo(0.19, 0.46)
+      ..lineTo(0.065, 0.26)
+      ..close()
+      ..moveTo(-0.07, 0.08)
+      ..lineTo(-0.34, 0.40)
+      ..lineTo(-0.29, 0.46)
+      ..lineTo(-0.19, 0.46)
+      ..lineTo(-0.065, 0.26)
+      ..close(),
+    cockpit: Path()..addOval(const Rect.fromLTWH(-0.04, -0.24, 0.08, 0.11)),
+    details: Path()
+      ..addRRect(RRect.fromRectAndRadius(
+        const Rect.fromLTWH(-0.09, -0.02, 0.18, 0.024),
+        const Radius.circular(0.01),
+      ))
+      ..addRRect(RRect.fromRectAndRadius(
+        const Rect.fromLTWH(-0.09, 0.12, 0.18, 0.024),
+        const Radius.circular(0.01),
+      )),
+    detailOpacity: 0.55,
+  );
+
+  /// Вояджер: широкий корпус дальнего перелёта с двумя боковыми
+  /// ускорителями - деталь, а не отдельный борт.
+  static final PlaneSkin rocketVoyager = PlaneSkin(
+    id: 'rocket_voyager',
+    nameKey: 'skin_rocket_voyager',
+    price: 2400,
+    category: SkinCategory.rocket,
+    thruster: true,
+    body: Path()
+      ..moveTo(0, -0.50)
+      ..cubicTo(0.09, -0.40, 0.13, -0.18, 0.13, 0.04)
+      ..cubicTo(0.13, 0.24, 0.12, 0.36, 0.10, 0.42)
+      ..lineTo(-0.10, 0.42)
+      ..cubicTo(-0.12, 0.36, -0.13, 0.24, -0.13, 0.04)
+      ..cubicTo(-0.13, -0.18, -0.09, -0.40, 0, -0.50)
+      ..close(),
+    tail: Path()
+      ..moveTo(0, -0.50)
+      ..cubicTo(0.07, -0.42, 0.09, -0.34, 0.09, -0.28)
+      ..lineTo(-0.09, -0.28)
+      ..cubicTo(-0.09, -0.34, -0.07, -0.42, 0, -0.50)
+      ..close(),
+    wings: Path()
+      ..moveTo(0.11, 0.18)
+      ..lineTo(0.32, 0.42)
+      ..lineTo(0.23, 0.46)
+      ..lineTo(0.10, 0.32)
+      ..close()
+      ..moveTo(-0.11, 0.18)
+      ..lineTo(-0.32, 0.42)
+      ..lineTo(-0.23, 0.46)
+      ..lineTo(-0.10, 0.32)
+      ..close(),
+    cockpit: Path()..addOval(const Rect.fromLTWH(-0.05, -0.18, 0.10, 0.12)),
+    // Боковые ускорители - пара капсул вдоль корпуса, тем же приёмом,
+    // что мотогондолы истребителя.
+    details: Path()
+      ..addRRect(RRect.fromRectAndRadius(
+        const Rect.fromLTWH(-0.20, -0.02, 0.06, 0.30),
+        const Radius.circular(0.03),
+      ))
+      ..addRRect(RRect.fromRectAndRadius(
+        const Rect.fromLTWH(0.14, -0.02, 0.06, 0.30),
+        const Radius.circular(0.03),
+      )),
+    detailOpacity: 0.7,
+  );
+
+  /// Нова: флагман - самый острый нос, развитые кили, светящийся контур.
+  static final PlaneSkin rocketNova = PlaneSkin(
+    id: 'rocket_nova',
+    nameKey: 'skin_rocket_nova',
+    price: 3200,
+    category: SkinCategory.rocket,
+    thruster: true,
+    glow: true,
+    body: Path()
+      ..moveTo(0, -0.60)
+      ..cubicTo(0.055, -0.50, 0.085, -0.26, 0.085, 0.02)
+      ..cubicTo(0.085, 0.22, 0.08, 0.36, 0.07, 0.44)
+      ..lineTo(-0.07, 0.44)
+      ..cubicTo(-0.08, 0.36, -0.085, 0.22, -0.085, 0.02)
+      ..cubicTo(-0.085, -0.26, -0.055, -0.50, 0, -0.60)
+      ..close(),
+    tail: Path()
+      ..moveTo(0, -0.60)
+      ..cubicTo(0.045, -0.52, 0.06, -0.44, 0.06, -0.38)
+      ..lineTo(-0.06, -0.38)
+      ..cubicTo(-0.06, -0.44, -0.045, -0.52, 0, -0.60)
+      ..close(),
+    wings: Path()
+      ..moveTo(0.065, 0.02)
+      ..lineTo(0.36, 0.38)
+      ..lineTo(0.31, 0.46)
+      ..lineTo(0.20, 0.46)
+      ..lineTo(0.06, 0.22)
+      ..close()
+      ..moveTo(-0.065, 0.02)
+      ..lineTo(-0.36, 0.38)
+      ..lineTo(-0.31, 0.46)
+      ..lineTo(-0.20, 0.46)
+      ..lineTo(-0.06, 0.22)
+      ..close()
+      // Малый гребень по центру спины - третий, более скромный киль.
+      ..moveTo(0.04, -0.10)
+      ..lineTo(0.05, 0.20)
+      ..lineTo(-0.05, 0.20)
+      ..lineTo(-0.04, -0.10)
+      ..close(),
+    cockpit: Path()..addOval(const Rect.fromLTWH(-0.04, -0.30, 0.08, 0.13)),
+    details: Path()
+      ..addRRect(RRect.fromRectAndRadius(
+        const Rect.fromLTWH(-0.07, -0.06, 0.14, 0.022),
+        const Radius.circular(0.01),
+      ))
+      ..addRRect(RRect.fromRectAndRadius(
+        const Rect.fromLTWH(-0.07, 0.06, 0.14, 0.022),
+        const Radius.circular(0.01),
+      ))
+      ..addRRect(RRect.fromRectAndRadius(
+        const Rect.fromLTWH(-0.07, 0.18, 0.14, 0.022),
+        const Radius.circular(0.01),
+      )),
+    detailOpacity: 0.6,
+  );
+
   // ------------------------------- награды за развитие аэропорта
   // В магазине их нет: выдаются только за уровни MY AIRPORT.
 
@@ -908,6 +1107,10 @@ class PlaneSkins {
     sailShip,
     steamShip,
     ferry,
+    rocketScout,
+    rocketRaider,
+    rocketVoyager,
+    rocketNova,
     founderJet,
     skylineCruiser,
     goldenArrow,

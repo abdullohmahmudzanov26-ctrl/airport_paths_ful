@@ -9,6 +9,7 @@ import '../../data/maze_generator.dart';
 import '../../data/maze_themes.dart';
 import '../../models/level_data.dart' show GridPos;
 import '../../models/maze_data.dart';
+import '../../models/plane_ability.dart';
 import '../../models/plane_skin.dart';
 import '../../services/audio_service.dart';
 import '../../services/service_locator.dart';
@@ -73,8 +74,10 @@ class BossMazeGame extends FlameGame {
     required this.maze,
     required this.theme,
     required this.skin,
+    this.ability = PlaneAbility.none,
     this.onWin,
     this.onFail,
+    this.onShieldUsed,
   });
 
   final MazeSpec maze;
@@ -83,17 +86,31 @@ class BossMazeGame extends FlameGame {
   /// Силуэт борта - тот же, что игрок выбрал в магазине.
   final PlaneSkin skin;
 
+  /// Способность экипированного борта. По умолчанию - PlaneAbility.none,
+  /// то есть все множители нейтральны и игра ведёт себя ровно так же,
+  /// как до способностей.
+  final PlaneAbility ability;
+
   /// Финиш достигнут: сколько секунд заняла попытка и сколько осталось.
   final void Function(int seconds, int secondsLeft)? onWin;
 
   /// Попытка провалена.
   final void Function(BossFailReason reason)? onFail;
 
+  /// Щит поглотил столкновение - попытка продолжается.
+  final VoidCallback? onShieldUsed;
+
   /// Сколько клеток лабиринта помещается на экран. Ранние боссы
   /// целиком влезают в эту рамку, поздние - уже нет, и поле начинает
   /// ехать за самолётом. Это часть роста сложности.
   static const int maxVisibleCols = 11;
   static const int maxVisibleRows = 15;
+
+  /// «Радар» (планер, Skyline Cruiser) отодвигает камеру шире -
+  /// видно больше коридоров вокруг борта. У способностей без бонуса
+  /// visionBonus == 0, и цифры совпадают со статикой выше.
+  int get visibleCols => maxVisibleCols + ability.visionBonus;
+  int get visibleRows => maxVisibleRows + ability.visionBonus;
 
   /// Радиус борта в долях клетки: коридор шириной в клетку остаётся
   /// проходимым, но впритык - отсюда ощущение узких проходов.
@@ -104,6 +121,17 @@ class BossMazeGame extends FlameGame {
   static const double trapHitRadius = 0.46;
   static const double hazardHitRadius = 0.52;
   static const double finishRadius = 0.42;
+
+  /// «Hover Control» и подобные способности уменьшают силуэт борта -
+  /// зажато между половиной и полным размером, чтобы лабиринт не стал
+  /// тривиальным даже с самой манёвренной способностью в игре.
+  double get _hitboxScale => ability.hitboxScale.clamp(0.5, 1.0);
+  double get _planeRadius => planeRadius * _hitboxScale;
+
+  /// Лимит времени с учётом бонусных секунд способности (например,
+  /// «Orbital Insertion»). Именно это число видит игрок на заставке
+  /// и на полосе таймера - маршрут в MazeSpec при этом не меняется.
+  int get effectiveTimeLimit => maze.timeLimit + ability.bonusSeconds;
 
   /// Мёртвая зона и радиус виртуального джойстика в пикселях.
   static const double _stickDead = 5;
@@ -137,6 +165,14 @@ class BossMazeGame extends FlameGame {
   Vector2 _view = Vector2.zero();
   MazeMapComponent? _map;
   double _lastWallBump = -1;
+
+  /// Остаток зарядов щита на эту попытку - обнуляется в startAttempt.
+  int _shieldLeft = 0;
+
+  /// До какого attemptTime столкновения не проверяются - короткое окно
+  /// неуязвимости сразу после того, как щит поглотил удар, чтобы тот же
+  /// кадр не сработал повторно.
+  double _invulnerableUntil = -1;
 
   bool get isPlaying => phase == BossPhase.running;
 
@@ -174,7 +210,7 @@ class BossMazeGame extends FlameGame {
     await add(MazeMinimapComponent(this));
 
     _resetPlane();
-    timeLeft = maze.timeLimit.toDouble();
+    timeLeft = effectiveTimeLimit.toDouble();
     _syncHud();
   }
 
@@ -196,11 +232,11 @@ class BossMazeGame extends FlameGame {
     }
 
     const double padding = 6;
-    final int visibleCols = math.min(maze.cols, maxVisibleCols);
-    final int visibleRows = math.min(maze.rows, maxVisibleRows);
+    final int cols = math.min(maze.cols, visibleCols);
+    final int rows = math.min(maze.rows, visibleRows);
     final double cell = math.min(
-      (_view.x - padding * 2) / visibleCols,
-      (_view.y - padding * 2) / visibleRows,
+      (_view.x - padding * 2) / cols,
+      (_view.y - padding * 2) / rows,
     );
     if (cell <= 0) {
       layout = BoardLayout.empty;
@@ -295,7 +331,7 @@ class BossMazeGame extends FlameGame {
     final Offset thrust = _thrust;
     if (thrust == Offset.zero) return;
 
-    final double speed = MazeGenerator.planeSpeed;
+    final double speed = MazeGenerator.planeSpeed * ability.speedMultiplier;
     final double dx = thrust.dx * speed * dt;
     final double dy = thrust.dy * speed * dt;
 
@@ -332,7 +368,7 @@ class BossMazeGame extends FlameGame {
   void _moveAlongX(double dx) {
     if (dx == 0) return;
     double next = planeCol + dx;
-    const double r = planeRadius;
+    final double r = _planeRadius;
 
     if (dx > 0) {
       final int col = (next + r).floor();
@@ -352,7 +388,7 @@ class BossMazeGame extends FlameGame {
   void _moveAlongY(double dy) {
     if (dy == 0) return;
     double next = planeRow + dy;
-    const double r = planeRadius;
+    final double r = _planeRadius;
 
     if (dy > 0) {
       final int row = (next + r).floor();
@@ -371,7 +407,7 @@ class BossMazeGame extends FlameGame {
 
   /// Занята ли хоть одна клетка колонки [col] на высоте борта.
   bool _blockedColumn(int col, double row) {
-    const double r = planeRadius;
+    final double r = _planeRadius;
     final int from = (row - r).floor();
     final int to = (row + r).floor();
     for (int rr = from; rr <= to; rr++) {
@@ -381,7 +417,7 @@ class BossMazeGame extends FlameGame {
   }
 
   bool _blockedRow(int row, double col) {
-    const double r = planeRadius;
+    final double r = _planeRadius;
     final int from = (col - r).floor();
     final int to = (col + r).floor();
     for (int cc = from; cc <= to; cc++) {
@@ -399,18 +435,38 @@ class BossMazeGame extends FlameGame {
   // -------------------------------------------------------- столкновения
 
   void _checkHazards() {
-    if (maze.trapDistance(planeCol, planeRow) < trapHitRadius) {
-      _fail(BossFailReason.trap);
+    // Короткое окно неуязвимости сразу после того, как щит поглотил
+    // удар - иначе тот же кадр тут же провалил бы попытку заново.
+    if (attemptTime < _invulnerableUntil) return;
+
+    final double trapR = trapHitRadius * _hitboxScale;
+    final bool trapHit = maze.trapDistance(planeCol, planeRow) < trapR;
+
+    bool hazardHit = false;
+    if (!trapHit) {
+      final double hazardR = hazardHitRadius * _hitboxScale;
+      for (final MazeMover mover in maze.movers) {
+        final ({double col, double row}) p = mover.positionAt(attemptTime);
+        if (_distance(planeCol, planeRow, p.col, p.row) < hazardR) {
+          hazardHit = true;
+          break;
+        }
+      }
+    }
+    if (!trapHit && !hazardHit) return;
+
+    // «Search & Rescue», «Reliable Ferry», «Golden Rush»: щит меняет
+    // фатальное столкновение на короткий испуг, а не на провал попытки.
+    if (_shieldLeft > 0) {
+      _shieldLeft--;
+      _invulnerableUntil = attemptTime + 0.8;
+      Services.audio.play(Sfx.unlock);
+      Services.haptics.impact();
+      onShieldUsed?.call();
       return;
     }
 
-    for (final MazeMover mover in maze.movers) {
-      final ({double col, double row}) p = mover.positionAt(attemptTime);
-      if (_distance(planeCol, planeRow, p.col, p.row) < hazardHitRadius) {
-        _fail(BossFailReason.hazard);
-        return;
-      }
-    }
+    _fail(trapHit ? BossFailReason.trap : BossFailReason.hazard);
   }
 
   void _checkFinish() {
@@ -449,8 +505,10 @@ class BossMazeGame extends FlameGame {
   void startAttempt() {
     _resetPlane();
     attemptTime = 0;
-    timeLeft = maze.timeLimit.toDouble();
+    timeLeft = effectiveTimeLimit.toDouble();
     _lastWallBump = -1;
+    _shieldLeft = ability.shieldCharges;
+    _invulnerableUntil = -1;
     stickAnchor = null;
     stickVector = Offset.zero;
     phase = BossPhase.running;
@@ -464,7 +522,9 @@ class BossMazeGame extends FlameGame {
   void holdIntro() {
     _resetPlane();
     attemptTime = 0;
-    timeLeft = maze.timeLimit.toDouble();
+    timeLeft = effectiveTimeLimit.toDouble();
+    _shieldLeft = ability.shieldCharges;
+    _invulnerableUntil = -1;
     phase = BossPhase.intro;
     _rebuildLayout();
     _syncHud();
@@ -511,17 +571,18 @@ class BossMazeGame extends FlameGame {
   Offset pixelOfCell(GridPos p) => pixelOf(p.col + 0.5, p.row + 0.5);
 
   void _syncHud() {
-    final int seconds = timeLeft.ceil().clamp(0, maze.timeLimit);
+    final int limit = effectiveTimeLimit;
+    final int seconds = timeLeft.ceil().clamp(0, limit);
     final BossHudState current = hud.value;
     if (current.phase == phase &&
         current.secondsLeft == seconds &&
-        current.timeLimit == maze.timeLimit) {
+        current.timeLimit == limit) {
       return;
     }
     hud.value = BossHudState(
       phase: phase,
       secondsLeft: seconds,
-      timeLimit: maze.timeLimit,
+      timeLimit: limit,
     );
   }
 }

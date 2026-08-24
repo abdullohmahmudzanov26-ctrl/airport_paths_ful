@@ -2,7 +2,7 @@ import 'dart:ui';
 
 /// Раздел магазина, к которому относится скин. Влияет только на
 /// группировку карточек в списке - на игру никак.
-enum SkinCategory { aircraft, helicopter, ship }
+enum SkinCategory { aircraft, helicopter, ship, rocket }
 
 /// Скин самолёта: силуэт и детали, но не цвет.
 ///
@@ -23,6 +23,7 @@ class PlaneSkin {
     this.propeller = false,
     this.rotor = false,
     this.glow = false,
+    this.thruster = false,
     this.category = SkinCategory.aircraft,
     this.exclusive = false,
   });
@@ -32,6 +33,10 @@ class PlaneSkin {
   final int price;
 
   /// Все пути в единичных координатах: центр в нуле, нос смотрит вверх.
+  /// У ракет «wings» отведён под хвостовые стабилизаторы, а «tail» -
+  /// под контрастный носовой обтекатель: поля описывают РОЛЬ детали
+  /// в рендере (чем красится, в каком слое), а не её обязательное
+  /// расположение - форма целиком определяется самим Path.
   final Path body;
   final Path wings;
   final Path tail;
@@ -56,6 +61,10 @@ class PlaneSkin {
 
   /// Светящийся контур.
   final bool glow;
+
+  /// Факел маршевого двигателя из хвоста - крупнее и вытянутее
+  /// декоративного exhaust у glow-скинов, отдельный флаг у ракет.
+  final bool thruster;
 
   bool get isFree => price == 0;
 }

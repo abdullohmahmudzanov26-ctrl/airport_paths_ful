@@ -3,6 +3,7 @@ import 'dart:math' as math;
 import 'package:flutter/material.dart';
 
 import '../data/app_strings.dart';
+import '../data/board_themes.dart';
 import '../data/super_milestones.dart';
 import '../theme/app_palette.dart';
 import '../theme/app_text_styles.dart';
@@ -13,9 +14,19 @@ import 'game_button.dart';
 /// Показывается поверх уже собранного WinOverlay через showDialog -
 /// ни новой навигации, ни нового состояния экрана игры не требуется.
 class SuperMilestoneOverlay extends StatefulWidget {
-  const SuperMilestoneOverlay({super.key, required this.milestone});
+  const SuperMilestoneOverlay({
+    super.key,
+    required this.milestone,
+    this.grantedThemeId,
+  });
 
   final SuperMilestone milestone;
+
+  /// На уровнях 100 и 150 та же веха приносит ещё и новую локацию
+  /// бесплатно - её можно надеть или не надевать по желанию, но
+  /// заявить об этом стоит громко, вместе с самой вехой, а не мелкой
+  /// строкой где-то ещё.
+  final String? grantedThemeId;
 
   @override
   State<SuperMilestoneOverlay> createState() => _SuperMilestoneOverlayState();
@@ -126,6 +137,59 @@ class _SuperMilestoneOverlayState extends State<SuperMilestoneOverlay>
                               ),
                             ],
                           ),
+                          if (widget.grantedThemeId != null) ...<Widget>[
+                            const SizedBox(height: 18),
+                            Container(
+                              padding: const EdgeInsets.symmetric(
+                                horizontal: 18,
+                                vertical: 12,
+                              ),
+                              decoration: BoxDecoration(
+                                color: Colors.white.withOpacity(0.08),
+                                borderRadius: BorderRadius.circular(14),
+                                border: Border.all(
+                                  color: p.primary.top.withOpacity(0.5),
+                                ),
+                              ),
+                              child: Column(
+                                mainAxisSize: MainAxisSize.min,
+                                children: <Widget>[
+                                  Row(
+                                    mainAxisSize: MainAxisSize.min,
+                                    children: <Widget>[
+                                      Icon(Icons.map_rounded,
+                                          size: 18, color: p.primary.top),
+                                      const SizedBox(width: 8),
+                                      Text(
+                                        tr('zone_unlocked_title'),
+                                        style: AppText.caption.copyWith(
+                                          color: p.primary.top,
+                                          letterSpacing: 1.4,
+                                        ),
+                                      ),
+                                    ],
+                                  ),
+                                  const SizedBox(height: 4),
+                                  Text(
+                                    tr(BoardThemes.byId(
+                                      widget.grantedThemeId,
+                                    ).nameKey),
+                                    style: AppText.value.copyWith(
+                                      color: Colors.white,
+                                    ),
+                                  ),
+                                  const SizedBox(height: 2),
+                                  Text(
+                                    tr('zone_unlocked_hint'),
+                                    textAlign: TextAlign.center,
+                                    style: AppText.caption.copyWith(
+                                      color: Colors.white.withOpacity(0.75),
+                                    ),
+                                  ),
+                                ],
+                              ),
+                            ),
+                          ],
                           const SizedBox(height: 28),
                           GameButton(
                             label: tr('resume'),

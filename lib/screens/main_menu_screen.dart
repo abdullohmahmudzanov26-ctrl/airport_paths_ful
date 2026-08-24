@@ -331,9 +331,9 @@ class _MenuButtons extends StatelessWidget {
             ? GameButtonKind.secondary
             : GameButtonKind.locked,
         width: width,
-        // Точка-напоминание, когда сегодняшний доход ещё не забран.
+        // Точка-напоминание, когда доход ещё не забран.
         badge: Services.progress.airportIncomeReady
-            ? Services.progress.airportDailyIncome
+            ? Services.progress.airportClaimAmount
             : null,
         onPressed: () => Navigator.of(context).pushNamed(Routes.myAirport),
       ),

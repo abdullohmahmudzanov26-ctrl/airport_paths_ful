@@ -48,6 +48,39 @@ class BossService extends ChangeNotifier {
   bool isCleared(int levelId) =>
       _storage.getBool(StorageKeys.bossCleared(levelId), false);
 
+  /// Зерно карты для этого босса.
+  ///
+  /// Раньше карта и тема пересоздавались случайными при КАЖДОМ входе
+  /// на уровень - выйти в меню и зайти обратно означало другую карту.
+  /// Теперь зерно генерируется один раз при первом входе и запоминается:
+  /// повторные заходы на тот же уровень (10, 20, 30...) видят ту же
+  /// самую карту и ту же тему, пока её не пройдут и не решат сыграть
+  /// заново. Разные боссы (10 и 20) всё так же получают разные карты -
+  /// у каждого уровня своё независимое зерно.
+  int mazeSeed(int levelId) {
+    final int stored = _storage.getInt(StorageKeys.bossMazeSeed(levelId), 0);
+    if (stored != 0) return stored;
+
+    final int fresh =
+        DateTime.now().microsecondsSinceEpoch ^ (levelId * 7919 + 104729);
+    // Значение уже готово и возвращается сразу; запись в хранилище может
+    // завершиться чуть позже - к следующему чтению она гарантированно
+    // успеет, а до этого момента тот же сеанс всё равно держит fresh
+    // в памяти вызывающей стороны.
+    _storage.setInt(StorageKeys.bossMazeSeed(levelId), fresh);
+    return fresh;
+  }
+
+  /// Новая случайная карта для этого босса взамен старой - осознанное
+  /// действие игрока (например, кнопка «другая карта» после победы),
+  /// а не побочный эффект простого входа на уровень.
+  Future<void> rerollMaze(int levelId) async {
+    final int fresh =
+        DateTime.now().microsecondsSinceEpoch ^ (levelId * 415241 + 17);
+    await _storage.setInt(StorageKeys.bossMazeSeed(levelId), fresh);
+    notifyListeners();
+  }
+
   /// Лучшее время прохождения в секундах. 0 - рекорда ещё нет.
   int bestTime(int levelId) =>
       _storage.getInt(StorageKeys.bossBestTime(levelId), 0);
@@ -111,6 +144,7 @@ class BossService extends ChangeNotifier {
       await _storage.remove(StorageKeys.bossLockUntil(id));
       await _storage.remove(StorageKeys.bossCleared(id));
       await _storage.remove(StorageKeys.bossBestTime(id));
+      await _storage.remove(StorageKeys.bossMazeSeed(id));
     }
     notifyListeners();
   }

@@ -6,8 +6,10 @@ import 'package:flutter/foundation.dart';
 
 import '../data/level_features.dart';
 import '../data/level_quests.dart';
+import '../data/plane_abilities.dart';
 import '../models/board_theme.dart';
 import '../models/level_data.dart';
+import '../models/plane_ability.dart';
 import '../models/plane_skin.dart';
 import '../services/audio_service.dart';
 import '../services/service_locator.dart';
@@ -82,6 +84,11 @@ class AirportGame extends FlameGame {
 
   /// Силуэт бортов - тоже из магазина.
   final PlaneSkin skin;
+
+  /// Способность экипированного борта - тем же приёмом, что и feature:
+  /// вычисляется один раз при загрузке. У стартового скина способности
+  /// нет, поэтому PlaneAbility.none ничего в полёте не меняет.
+  late final PlaneAbility ability = PlaneAbilities.byId(skin.id);
 
   /// Уровень пройден: ходы и секунды. Звёзды и награду считает экран -
   /// игра не должна знать про сохранения и монеты.

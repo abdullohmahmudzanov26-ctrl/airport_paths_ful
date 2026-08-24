@@ -32,8 +32,7 @@ class MazeMinimapComponent extends Component {
     ..strokeWidth = 1.4;
 
   bool get _needed =>
-      game.maze.cols > BossMazeGame.maxVisibleCols ||
-      game.maze.rows > BossMazeGame.maxVisibleRows;
+      game.maze.cols > game.visibleCols || game.maze.rows > game.visibleRows;
 
   @override
   void onRemove() {

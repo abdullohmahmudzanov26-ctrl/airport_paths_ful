@@ -1,7 +1,6 @@
 import 'dart:ui';
 
 import '../models/board_theme.dart';
-import 'level_repository.dart';
 
 /// Каталог тем. Порядок = порядок в магазине.
 class BoardThemes {
@@ -410,11 +409,4 @@ class BoardThemes {
 
   /// Тема поля для уровня: в орбитальной зоне она задана сюжетом,
   /// на остальных — та, что игрок выбрал в магазине.
-  /// Тема поля: у орбитальной и EVENT-зоны она задана сюжетом,
-  /// на остальных - выбранная игроком в магазине.
-  static BoardTheme forLevel(int levelId, String equippedId) {
-    if (levelId >= LevelRepository.eventFrom) return volcanic;
-    if (levelId >= LevelRepository.orbitalFrom) return orbital;
-    return byId(equippedId);
-  }
 }

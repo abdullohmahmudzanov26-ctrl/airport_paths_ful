@@ -26,13 +26,23 @@ class MazePlaneComponent extends Component {
 
   double _idle = 0;
 
-  final Paint _shadowPaint = Paint()..color = const Color(0x4D000000);
+  final Paint _shadowPaint = Paint()
+    ..color = const Color(0x4D000000)
+    ..maskFilter = const MaskFilter.blur(BlurStyle.normal, 0.028);
   final Paint _bodyPaint = Paint();
   final Paint _wingPaint = Paint();
   final Paint _tailPaint = Paint();
   final Paint _glossPaint = Paint();
+  final Paint _wingGlossPaint = Paint();
   final Paint _detailPaint = Paint();
   final Paint _cockpitPaint = Paint()..color = const Color(0xCC0E2439);
+  final Paint _cockpitGlossPaint = Paint()..color = const Color(0x8CFFFFFF);
+  Rect _cockpitHighlight = Rect.zero;
+  final Paint _rimPaint = Paint()
+    ..style = PaintingStyle.stroke
+    ..strokeWidth = 0.022
+    ..strokeCap = StrokeCap.round
+    ..color = const Color(0x8CFFFFFF);
   final Paint _outlinePaint = Paint()
     ..style = PaintingStyle.stroke
     ..strokeWidth = 0.035
@@ -49,9 +59,9 @@ class MazePlaneComponent extends Component {
       begin: Alignment.centerLeft,
       end: Alignment.centerRight,
       colors: <Color>[
-        _lighten(_base, 1.28),
+        _lighten(_base, 1.38),
         _base,
-        _shade(_base, 0.68),
+        _shade(_base, 0.64),
       ],
       stops: const <double>[0.0, 0.45, 1.0],
     ).createShader(const Rect.fromLTWH(-0.20, -0.55, 0.40, 1.10));
@@ -60,12 +70,21 @@ class MazePlaneComponent extends Component {
       begin: Alignment.centerLeft,
       end: Alignment.centerRight,
       colors: <Color>[
-        _lighten(_shade(_base, 0.86), 1.16),
+        _lighten(_shade(_base, 0.86), 1.22),
         _shade(_base, 0.80),
-        _shade(_base, 0.60),
+        _shade(_base, 0.56),
       ],
       stops: const <double>[0.0, 0.5, 1.0],
     ).createShader(const Rect.fromLTWH(-0.58, -0.20, 1.16, 0.80));
+
+    _wingGlossPaint.shader = const LinearGradient(
+      begin: Alignment.topCenter,
+      end: Alignment.bottomCenter,
+      colors: <Color>[
+        Color(0x4DFFFFFF),
+        Color(0x00FFFFFF),
+      ],
+    ).createShader(const Rect.fromLTWH(-0.58, -0.20, 1.16, 0.30));
 
     _tailPaint.color = _shade(_base, 0.72);
     _detailPaint.color = _shade(_base, 0.62).withOpacity(skin.detailOpacity);
@@ -78,6 +97,14 @@ class MazePlaneComponent extends Component {
         Color(0x33000000),
       ],
     ).createShader(const Rect.fromLTWH(-0.15, -0.5, 0.3, 1.0));
+
+    final Rect cb = skin.cockpit.getBounds();
+    _cockpitHighlight = Rect.fromLTWH(
+      cb.left + cb.width * 0.16,
+      cb.top + cb.height * 0.12,
+      cb.width * 0.34,
+      cb.height * 0.30,
+    );
 
     _haloPaint.color = game.theme.accent.withOpacity(0.18);
     _stickRing.color = game.theme.accent.withOpacity(0.35);
@@ -121,6 +148,9 @@ class MazePlaneComponent extends Component {
     canvas.drawPath(skin.tail, _tailPaint);
     canvas.drawPath(skin.wings, _wingPaint);
     canvas.drawPath(skin.wings, _outlinePaint);
+    canvas.drawPath(skin.wings, _rimPaint);
+    canvas.drawPath(skin.wings, _wingGlossPaint);
+    canvas.drawPath(skin.tail, _rimPaint);
 
     final Path? details = skin.details;
     if (details != null) canvas.drawPath(details, _detailPaint);
@@ -128,7 +158,9 @@ class MazePlaneComponent extends Component {
     canvas.drawPath(skin.body, _bodyPaint);
     canvas.drawPath(skin.body, _outlinePaint);
     canvas.drawPath(skin.body, _glossPaint);
+    canvas.drawPath(skin.body, _rimPaint);
     canvas.drawPath(skin.cockpit, _cockpitPaint);
+    canvas.drawOval(_cockpitHighlight, _cockpitGlossPaint);
 
     canvas.restore();
 

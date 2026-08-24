@@ -43,7 +43,12 @@ class MazeDifficulty {
       traps: math.min(18, 2 * i),
       closedZones: math.min(6, i),
       movers: math.min(7, i),
-      moverSpeed: math.min(2.6, 1.0 + 0.16 * i),
+      // Потолок в 2.0, а не в 2.6: скорость самолёта - 3.2 клетки/сек,
+      // и при более быстром патруле окно для честного проскока могло
+      // сжиматься до долей секунды на любой длине коридора - соотношение
+      // не зависит от длины, только от скоростей. Ниже это ещё и
+      // проверяется симуляцией, а не только словом.
+      moverSpeed: math.min(2.0, 1.0 + 0.14 * i),
     );
   }
 
@@ -58,10 +63,16 @@ class MazeDifficulty {
 /// связный лабиринт, затем из него берётся гарантированный путь
 /// старт-финиш, и уже вокруг этого пути расставляются ловушки, закрытые
 /// зоны и движущиеся препятствия. Ни один из них не встаёт на
-/// сохранённый путь, поэтому карта всегда проходима.
+/// сохранённый путь, поэтому карта всегда проходима СТАТИЧЕСКИ.
 ///
-/// Дополнительно результат проверяется поиском в ширину: если проверка
-/// вдруг не прошла, карта строится заново с другим зерном.
+/// Этого одного было недостаточно: патруль мог качаться прямо через
+/// единственную развилку на пути, и BFS по одним стенам этого не видел -
+/// карта считалась «проходимой», хотя реально пройти её было тяжело или
+/// невозможно, потому что окно между двумя проходами патруля оказывалось
+/// слишком узким. Поэтому результат дополнительно проверяется симуляцией
+/// по времени (см. _hasTimedRoute): если игрок в принципе не успевает
+/// добраться до финиша, увернувшись от патрулей и ловушек в пределах
+/// лимита времени, - карта строится заново с другим зерном.
 class MazeGenerator {
   const MazeGenerator._();
 
@@ -78,12 +89,14 @@ class MazeGenerator {
     MazeSpec? fallback;
     for (int attempt = 0; attempt < _maxRebuilds; attempt++) {
       final MazeSpec spec = _build(d, baseSeed + attempt * 7919);
-      if (_isSolvable(spec)) return spec;
+      if (_isSolvable(spec) && _hasTimedRoute(spec)) return spec;
       fallback ??= spec;
     }
 
-    // Досюда дойти не должно: путь резервируется до расстановки ловушек.
-    // Но если это случилось - отдаём карту без ловушек, а не тупик.
+    // Досюда дойти не должно: путь резервируется до расстановки ловушек,
+    // а скорость патрулей подобрана так, чтобы окно для проскока всегда
+    // находилось. Но если случайность 12 раз подряд собрала неудачную
+    // карту - отдаём её без ловушек и без патрулей, а не тупик игроку.
     final MazeSpec safe = fallback!;
     return MazeSpec(
       cols: safe.cols,
@@ -92,7 +105,7 @@ class MazeGenerator {
       start: safe.start,
       finish: safe.finish,
       traps: const <GridPos>[],
-      movers: safe.movers,
+      movers: const <MazeMover>[],
       timeLimit: safe.timeLimit,
       solutionLength: safe.solutionLength,
     );
@@ -285,7 +298,9 @@ class MazeGenerator {
           while (c2 + 1 < cols && isFloor(c2 + 1, r)) {
             c2++;
           }
-          if (c2 - c + 1 >= 3) runs.add(<int>[c, r, c2, r]);
+          // Минимум пять клеток, не три: короче - разгон патруля почти
+          // не оставляет игроку времени прочитать его ритм на глаз.
+          if (c2 - c + 1 >= 5) runs.add(<int>[c, r, c2, r]);
           c = c2 + 1;
         } else {
           c++;
@@ -300,7 +315,7 @@ class MazeGenerator {
           while (r2 + 1 < rows && isFloor(c, r2 + 1)) {
             r2++;
           }
-          if (r2 - r + 1 >= 3) runs.add(<int>[c, r, c, r2]);
+          if (r2 - r + 1 >= 5) runs.add(<int>[c, r, c, r2]);
           r = r2 + 1;
         } else {
           r++;
@@ -308,6 +323,28 @@ class MazeGenerator {
       }
     }
     runs.shuffle(rnd);
+
+    // Клетки в шаге от ловушки - тоже под запретом для патруля: иначе
+    // получается связка «увернись от мины ПОД патрулём», а это уже
+    // не честная сложность, а два наложенных риска в одной точке.
+    final Set<int> trapVicinity = <int>{};
+    for (final int t in trapIdx) {
+      trapVicinity.add(t);
+      final int tc = t % cols;
+      final int tr = t ~/ cols;
+      for (final List<int> delta in const <List<int>>[
+        <int>[1, 0],
+        <int>[-1, 0],
+        <int>[0, 1],
+        <int>[0, -1],
+      ]) {
+        final int nc = tc + delta[0];
+        final int nr = tr + delta[1];
+        if (nc >= 0 && nc < cols && nr >= 0 && nr < rows) {
+          trapVicinity.add(at(nc, nr));
+        }
+      }
+    }
 
     final Set<int> used = <int>{};
     final List<MazeMover> movers = <MazeMover>[];
@@ -330,7 +367,7 @@ class MazeGenerator {
       bool hasJunction = false;
       for (final int idx in cells) {
         if (used.contains(idx) ||
-            trapIdx.contains(idx) ||
+            trapVicinity.contains(idx) ||
             idx == startIdx ||
             idx == finishIdx) {
           free = false;
@@ -380,6 +417,129 @@ class MazeGenerator {
       blocked,
     );
     return search.dist[spec.finish.row * spec.cols + spec.finish.col] >= 0;
+  }
+
+  /// Тот же порог столкновения, что и в самой игре (BossMazeGame.
+  /// hazardHitRadius) - симуляция не должна быть ни строже, ни мягче
+  /// настоящих правил, иначе она либо бракует честные карты, либо
+  /// пропускает нечестные.
+  static const double _hazardCheckRadius = 0.52;
+
+  /// Успевает ли игрок добраться до финиша, вовремя уворачиваясь от
+  /// патрулей, а не просто «есть ли вообще дорога».
+  ///
+  /// _isSolvable выше видит только стены и статичные ловушки - патруль,
+  /// качающийся ровно через единственную развилку на пути, эта проверка
+  /// пропускала: карта считалась «проходимой», хотя реального окна для
+  /// проскока могло не быть вовсе. Здесь состояние поиска - не просто
+  /// клетка, а пара (клетка, момент времени): на каждом шаге можно
+  /// либо шагнуть в соседнюю клетку, либо переждать на месте, и то,
+  /// и другое - только если в этот момент там нет патруля. Если так
+  /// дойти до финиша нельзя ни за какое время в пределах лимита -
+  /// карта отбраковывается и генератор пробует другое зерно.
+  ///
+  /// Шаг по времени подобран НЕМНОГО МЕДЛЕННЕЕ настоящей скорости
+  /// самолёта (1/dt чуть меньше planeSpeed), а сама симуляция считает
+  /// только четыре направления без диагоналей - то есть заведомо
+  /// осторожнее, чем реальный полёт со свободным углом. Лучше лишний
+  /// раз перегенерировать карту, чем один раз пропустить нечестную.
+  static bool _hasTimedRoute(MazeSpec spec) {
+    if (spec.movers.isEmpty) return true;
+
+    const double dt = 0.32;
+    final int cols = spec.cols;
+    final int rows = spec.rows;
+    final int steps = (spec.timeLimit / dt).ceil();
+    final int startIdx = spec.start.row * cols + spec.start.col;
+    final int finishIdx = spec.finish.row * cols + spec.finish.col;
+    final int cellCount = cols * rows;
+
+    final Set<int> trapIdx =
+        spec.traps.map((GridPos p) => p.row * cols + p.col).toSet();
+    bool cellOpen(int idx) =>
+        spec.tiles[idx] == MazeTile.floor && !trapIdx.contains(idx);
+
+    // Набор опасных клеток на каждый момент времени считается один раз
+    // на шаг, а не один раз на каждую пару (клетка, шаг) - иначе
+    // проверка стоила бы на порядок дороже при том же результате.
+    final List<Set<int>> hazardByStep = List<Set<int>>.generate(
+      steps + 1,
+      (int step) {
+        final double t = step * dt;
+        final Set<int> danger = <int>{};
+        for (final MazeMover mover in spec.movers) {
+          final ({double col, double row}) p = mover.positionAt(t);
+          final int cMin = (p.col - 1).floor().clamp(0, cols - 1);
+          final int cMax = (p.col + 1).floor().clamp(0, cols - 1);
+          final int rMin = (p.row - 1).floor().clamp(0, rows - 1);
+          final int rMax = (p.row + 1).floor().clamp(0, rows - 1);
+          for (int r = rMin; r <= rMax; r++) {
+            for (int c = cMin; c <= cMax; c++) {
+              final double dx = c + 0.5 - p.col;
+              final double dy = r + 0.5 - p.row;
+              if (dx * dx + dy * dy < _hazardCheckRadius * _hazardCheckRadius) {
+                danger.add(r * cols + c);
+              }
+            }
+          }
+        }
+        return danger;
+      },
+    );
+
+    final List<bool> visited =
+        List<bool>.filled((steps + 1) * cellCount, false);
+    bool wasVisited(int step, int cell) => visited[step * cellCount + cell];
+    void markVisited(int step, int cell) =>
+        visited[step * cellCount + cell] = true;
+
+    if (!cellOpen(startIdx) || hazardByStep[0].contains(startIdx)) {
+      return false;
+    }
+    markVisited(0, startIdx);
+
+    final List<int> queueCell = <int>[startIdx];
+    final List<int> queueStep = <int>[0];
+    int head = 0;
+
+    const List<List<int>> deltas = <List<int>>[
+      <int>[0, 0],
+      <int>[1, 0],
+      <int>[-1, 0],
+      <int>[0, 1],
+      <int>[0, -1],
+    ];
+
+    while (head < queueCell.length) {
+      final int cell = queueCell[head];
+      final int step = queueStep[head];
+      head++;
+
+      if (cell == finishIdx) return true;
+      if (step >= steps) continue;
+
+      final int c = cell % cols;
+      final int r = cell ~/ cols;
+      final int nextStep = step + 1;
+      final Set<int> danger = hazardByStep[nextStep];
+
+      for (final List<int> delta in deltas) {
+        final int nc = c + delta[0];
+        final int nr = r + delta[1];
+        if (nc < 0 || nc >= cols || nr < 0 || nr >= rows) continue;
+
+        final int nIdx = nr * cols + nc;
+        if (wasVisited(nextStep, nIdx)) continue;
+        if (!cellOpen(nIdx)) continue;
+        if (danger.contains(nIdx)) continue;
+
+        markVisited(nextStep, nIdx);
+        queueCell.add(nIdx);
+        queueStep.add(nextStep);
+      }
+    }
+
+    return false;
   }
 
   static _Search _bfs(
