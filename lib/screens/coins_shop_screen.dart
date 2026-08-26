@@ -1,8 +1,10 @@
+import 'package:airport_paths/widgets/game_button.dart';
 import 'package:flutter/material.dart';
 
 import '../data/app_strings.dart';
+import '../data/iap_catalog.dart';
 import '../data/super_milestones.dart';
-import '../services/ad_service.dart';
+import '../models/iap_product.dart';
 import '../services/audio_service.dart';
 import '../services/service_locator.dart';
 import '../theme/app_palette.dart';
@@ -10,16 +12,18 @@ import '../theme/app_text_styles.dart';
 import '../widgets/airport_backdrop.dart';
 import '../widgets/animated_entrance.dart';
 import '../widgets/app_panel.dart';
-import '../widgets/game_button.dart';
+import '../widgets/iap_product_card.dart';
 import '../widgets/responsive_center.dart';
 import '../widgets/screen_header.dart';
 import '../widgets/stat_chip.dart';
 
 /// COINS SHOP: всё, что приносит монеты, в одном месте.
 ///
-/// Ничего из этого не новая валюта - это витрина уже существующих
-/// источников (ProgressService.coins, AdService, достижения-вехи),
-/// собранная так, чтобы игрок сразу видел, откуда брать деньги.
+/// Бесплатная часть (дневной бонус, награда за уровни, вехи) - витрина
+/// уже существующих источников ProgressService.coins. Реклама убрана:
+/// вместо неё - каталог доната за реальные деньги (IapCatalog), оплата
+/// которого пока заглушена (см. PurchaseService._processPayment) и
+/// ждёт подключения платёжного SDK и банковской карты разработчика.
 class CoinsShopScreen extends StatefulWidget {
   const CoinsShopScreen({super.key});
 
@@ -47,27 +51,16 @@ class _CoinsShopScreenState extends State<CoinsShopScreen> {
     _showFlash(amount);
   }
 
-  Future<void> _watchAd({required bool bonus}) async {
-    if (!(bonus ? Services.ads.canWatchBonus : Services.ads.canWatch)) return;
-    // Награда приходит только если showRewarded() вернул true - а это
-    // случится только после честного onUserEarnedReward у реального SDK.
-    final bool rewarded = await Services.ads.showRewarded(bonus: bonus);
-    if (!rewarded || !mounted) return;
-    final int amount =
-        bonus ? AdService.bonusCoinsPerAd : AdService.coinsPerAd;
-    await Services.progress.rewardCoins(amount);
+  /// Покупка товара доната: сервис подтверждает оплату, экран следом
+  /// начисляет награду - ровно то же разделение ролей, что было
+  /// у рекламы (showRewarded → rewardCoins), просто источник другой.
+  Future<void> _buy(IapProduct product) async {
+    final bool success = await Services.purchases.buy(product);
+    if (!success || !mounted) return;
+    await Services.progress.grantIapReward(product);
     Services.audio.play(Sfx.unlock);
     Services.haptics.success();
-    _showFlash(amount);
-  }
-
-  Future<void> _armDouble() async {
-    if (!Services.ads.canWatch || Services.progress.doubleRewardArmed) return;
-    final bool rewarded = await Services.ads.showRewarded();
-    if (!rewarded || !mounted) return;
-    await Services.progress.armDoubleReward();
-    Services.audio.play(Sfx.unlock);
-    Services.haptics.success();
+    if (product.coins > 0) _showFlash(product.coins);
   }
 
   @override
@@ -81,7 +74,7 @@ class _CoinsShopScreenState extends State<CoinsShopScreen> {
         child: SafeArea(
           child: AnimatedBuilder(
             animation: Listenable.merge(
-              <Listenable>[Services.progress, Services.ads],
+              <Listenable>[Services.progress, Services.purchases, Services.settings],
             ),
             builder: (BuildContext context, _) {
               return Column(
@@ -137,53 +130,62 @@ class _CoinsShopScreenState extends State<CoinsShopScreen> {
                             ),
                           ),
                           const SizedBox(height: 18),
-                          _Section(title: tr('cs_ads')),
+                          _Section(title: tr('cs_donate')),
                           AnimatedEntrance(
                             delay: const Duration(milliseconds: 60),
-                            child: _RewardCard(
-                              icon: Icons.play_circle_fill_rounded,
-                              iconColor: p.success.top,
-                              title: '${tr('watch_ad')} +${AdService.coinsPerAd}',
-                              subtitle:
-                                  '${Services.ads.leftToday} ${tr('cs_left_today')}',
-                              buttonLabel: tr('watch'),
-                              enabled: Services.ads.canWatch,
-                              onTap: () => _watchAd(bonus: false),
+                            child: IapProductCard(
+                              product: IapCatalog.starterPack,
+                              owned: Services.purchases
+                                  .isOwned(IapCatalog.starterPack.id),
+                              processing: Services.purchases.isProcessing,
+                              onBuy: () => _buy(IapCatalog.starterPack),
+                            ),
+                          ),
+                          const SizedBox(height: 10),
+                          for (int i = 0; i < IapCatalog.coinPacks.length; i++)
+                            Padding(
+                              padding: const EdgeInsets.only(bottom: 10),
+                              child: AnimatedEntrance(
+                                delay: Duration(milliseconds: 90 + i * 30),
+                                child: IapProductCard(
+                                  product: IapCatalog.coinPacks[i],
+                                  owned: false,
+                                  processing: Services.purchases.isProcessing,
+                                  onBuy: () => _buy(IapCatalog.coinPacks[i]),
+                                ),
+                              ),
+                            ),
+                          for (int i = 0; i < IapCatalog.hintPacks.length; i++)
+                            Padding(
+                              padding: const EdgeInsets.only(bottom: 10),
+                              child: AnimatedEntrance(
+                                delay: Duration(milliseconds: 240 + i * 30),
+                                child: IapProductCard(
+                                  product: IapCatalog.hintPacks[i],
+                                  owned: false,
+                                  processing: Services.purchases.isProcessing,
+                                  onBuy: () => _buy(IapCatalog.hintPacks[i]),
+                                ),
+                              ),
+                            ),
+                          AnimatedEntrance(
+                            delay: const Duration(milliseconds: 300),
+                            child: IapProductCard(
+                              product: IapCatalog.doubleBoost,
+                              owned: false,
+                              processing: Services.purchases.isProcessing,
+                              onBuy: () => _buy(IapCatalog.doubleBoost),
                             ),
                           ),
                           const SizedBox(height: 10),
                           AnimatedEntrance(
-                            delay: const Duration(milliseconds: 100),
-                            child: _RewardCard(
-                              icon: Icons.local_fire_department_rounded,
-                              iconColor: p.primary.top,
-                              rare: true,
-                              title:
-                                  '${tr('cs_bonus_ad')} +${AdService.bonusCoinsPerAd}',
-                              subtitle:
-                                  '${Services.ads.bonusLeftToday} ${tr('cs_left_today')}',
-                              buttonLabel: tr('watch'),
-                              enabled: Services.ads.canWatchBonus,
-                              onTap: () => _watchAd(bonus: true),
-                            ),
-                          ),
-                          const SizedBox(height: 10),
-                          AnimatedEntrance(
-                            delay: const Duration(milliseconds: 140),
-                            child: _RewardCard(
-                              icon: Icons.bolt_rounded,
-                              iconColor: p.coin,
-                              rare: true,
-                              title: tr('cs_double'),
-                              subtitle: Services.progress.doubleRewardArmed
-                                  ? tr('cs_double_armed')
-                                  : tr('cs_double_hint'),
-                              buttonLabel: Services.progress.doubleRewardArmed
-                                  ? tr('cs_ready')
-                                  : tr('watch'),
-                              enabled: Services.ads.canWatch &&
-                                  !Services.progress.doubleRewardArmed,
-                              onTap: _armDouble,
+                            delay: const Duration(milliseconds: 330),
+                            child: IapProductCard(
+                              product: IapCatalog.removeAds,
+                              owned: Services.purchases
+                                  .isOwned(IapCatalog.removeAds.id),
+                              processing: Services.purchases.isProcessing,
+                              onBuy: () => _buy(IapCatalog.removeAds),
                             ),
                           ),
                           const SizedBox(height: 18),
@@ -330,9 +332,8 @@ class _RewardCard extends StatelessWidget {
     required this.buttonLabel,
     required this.enabled,
     required this.onTap,
-    this.rare = false,
     this.glow = false,
-  });
+  }) : rare = false;
 
   final IconData icon;
   final Color iconColor;

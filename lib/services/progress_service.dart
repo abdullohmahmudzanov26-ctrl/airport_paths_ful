@@ -4,10 +4,11 @@ import '../data/achievements_data.dart';
 import '../data/airport_evolution.dart';
 import '../data/board_themes.dart';
 import '../data/super_milestones.dart';
-import '../data/daily_flight.dart';
+import '../data/daily_keys.dart';
 import '../data/plane_skins.dart';
 import '../data/level_repository.dart';
 import '../models/achievement.dart';
+import '../models/iap_product.dart';
 import 'storage_service.dart';
 
 /// Прогресс игрока: открытые уровни, звёзды, рекорды, монеты,
@@ -27,11 +28,6 @@ class ProgressService extends ChangeNotifier {
   Set<String> _ownedSkins = <String>{PlaneSkins.defaultId};
   String _equippedSkin = PlaneSkins.defaultId;
   int _hintsRefillDay = 0;
-  int _dailyLast = 0;
-  int _dailyStreak = 0;
-  int _dailyBestStreak = 0;
-  int _dailyStars = 0;
-  int _dailyReward = 0;
   int _airportLevel = 0;
 
   /// Момент последнего сбора дохода в миллисекундах эпохи - было
@@ -91,12 +87,6 @@ class ProgressService extends ChangeNotifier {
     _doubleRewardArmed =
         _storage.getBool(StorageKeys.doubleRewardArmed, false);
     await refreshDailyHints();
-
-    _dailyLast = _storage.getInt(StorageKeys.dailyLast, 0);
-    _dailyStreak = _storage.getInt(StorageKeys.dailyStreak, 0);
-    _dailyBestStreak = _storage.getInt(StorageKeys.dailyBestStreak, 0);
-    _dailyStars = _storage.getInt(StorageKeys.dailyStars, 0);
-    _dailyReward = _storage.getInt(StorageKeys.dailyReward, 0);
 
     _airportLevel = _storage
         .getInt(StorageKeys.airportLevel, 0)
@@ -313,7 +303,10 @@ class ProgressService extends ChangeNotifier {
 
   bool hasAchievement(String id) => _achievements.contains(id);
 
-  // ---------------------------------------------------------- за рекламу
+  // ------------------------------------------------- награды извне игры
+  // Общие для рекламы (оставшийся мид-геймовый ролик за подсказку)
+  // и доната - откуда бы монеты и подсказки ни пришли, начисляются
+  // они одинаково.
 
   Future<void> rewardCoins(int amount) async {
     _coins += amount;
@@ -328,50 +321,16 @@ class ProgressService extends ChangeNotifier {
     notifyListeners();
   }
 
-  // ------------------------------------------------------------ рейс дня
-
-  int get dailyStreak => _dailyStreak;
-
-  int get dailyBestStreak => _dailyBestStreak;
-
-  /// Результат сегодняшнего рейса - чтобы панель показывала не
-  /// только серию, но и чем именно закончился день.
-  int get dailyStars => _dailyStars;
-
-  int get dailyReward => _dailyReward;
-
-  /// Сегодняшний рейс уже пройден.
-  bool get dailyDoneToday => _dailyLast == DailyFlight.todayKey();
-
-  /// Записывает рейс дня. Серия продолжается, только если предыдущий
-  /// зачёт был вчера: пропустил день - счёт начинается заново.
-  Future<int> completeDaily({required int stars}) async {
-    final int today = DailyFlight.todayKey();
-    if (_dailyLast == today) return 0;
-
-    _dailyStreak =
-        _dailyLast == DailyFlight.yesterdayKey() ? _dailyStreak + 1 : 1;
-    _dailyLast = today;
-    if (_dailyStreak > _dailyBestStreak) {
-      _dailyBestStreak = _dailyStreak;
-      await _storage.setInt(StorageKeys.dailyBestStreak, _dailyBestStreak);
+  /// Начисляет то, что даёт купленный товар доната: монеты, подсказки,
+  /// а для стартового набора и разового буста - ещё и удвоение
+  /// следующей награды за уровень. Вызывается уже ПОСЛЕ того, как
+  /// PurchaseService подтвердил успешную оплату - здесь только выдача.
+  Future<void> grantIapReward(IapProduct product) async {
+    if (product.coins > 0) await rewardCoins(product.coins);
+    if (product.hints > 0) await rewardHints(product.hints);
+    if (product.id == 'starter_pack' || product.id == 'double_boost') {
+      await armDoubleReward();
     }
-
-    final int reward =
-        DailyFlight.reward(stars: stars, streak: _dailyStreak);
-    _coins += reward;
-    _dailyStars = stars;
-    _dailyReward = reward;
-    await _storage.setInt(StorageKeys.dailyStars, stars);
-    await _storage.setInt(StorageKeys.dailyReward, reward);
-
-    await _storage.setInt(StorageKeys.dailyLast, _dailyLast);
-    await _storage.setInt(StorageKeys.dailyStreak, _dailyStreak);
-    await _storage.setInt(StorageKeys.coins, _coins);
-
-    await _checkAchievements();
-    notifyListeners();
-    return reward;
   }
 
   // ------------------------------------------------- развитие аэропорта
@@ -390,23 +349,48 @@ class ProgressService extends ChangeNotifier {
   int get airportUpgradeCost =>
       airportMaxed ? 0 : AirportEvolution.costFor(_airportLevel + 1);
 
-  /// Сумма одного сбора. Название без «daily» - теперь это не сутки,
-  /// а разовая прибавка за клейм.
+  /// Ставка одной пятиминутки. Название без «daily» - это не сутки,
+  /// а цена ровно одного тика в банке.
   int get airportClaimAmount => AirportEvolution.incomeFor(_airportLevel);
 
-  /// Доход можно забрать раз в пять минут и только при построенном
-  /// аэропорте.
-  bool get airportIncomeReady =>
+  /// Сколько тиков накопилось с последнего сбора - настоящее фоновое
+  /// начисление: считается от разницы реальных часов, а не от того,
+  /// открыт ли сейчас экран. Игрок закрыл приложение на два часа -
+  /// вернувшись, застаёт банк с 24 тиками, а не с одним. Выше потолка
+  /// (AirportEvolution.maxBankedTicks) счётчик просто перестаёт расти.
+  int get _bankedTicks {
+    if (_airportIncomeClaimedAt <= 0) return 0;
+    final int tickMs = AirportEvolution.incomeIntervalSeconds * 1000;
+    final int elapsedMs = DateTime.now().millisecondsSinceEpoch - _airportIncomeClaimedAt;
+    if (elapsedMs < tickMs) return 0;
+    return (elapsedMs ~/ tickMs).clamp(0, AirportEvolution.maxBankedTicks);
+  }
+
+  /// Сумма, которая реально ждёт сбора прямо сейчас - то самое число,
+  /// что показывает кнопка. 0, пока не набежала первая пятиминутка.
+  int get airportBankedAmount => _bankedTicks * airportClaimAmount;
+
+  /// Банк упёрся в потолок - копить дальше некуда, самое время забрать.
+  /// Экран может честно предупредить об этом, а не молчать о том,
+  /// что часть времени уже пропадает впустую.
+  bool get airportBankFull =>
       airportUnlocked &&
       _airportLevel > 0 &&
-      _msSinceClaim >= AirportEvolution.incomeIntervalSeconds * 1000;
+      _bankedTicks >= AirportEvolution.maxBankedTicks;
 
-  /// Сколько секунд осталось до следующего сбора. 0, если уже можно
-  /// забирать - экран показывает либо кнопку, либо этот отсчёт.
+  /// Есть что забрать - и построенный аэропорт, и хотя бы один
+  /// накопленный тик.
+  bool get airportIncomeReady =>
+      airportUnlocked && _airportLevel > 0 && _bankedTicks > 0;
+
+  /// Сколько секунд осталось до ПЕРВОГО тика, если банк сейчас пуст.
+  /// Пока в банке уже есть что забрать, отсчитывать нечего - экран
+  /// показывает кнопку сбора вместо таймера.
   int get airportIncomeSecondsLeft {
     if (!airportUnlocked || _airportLevel <= 0) return 0;
-    final int leftMs =
-        AirportEvolution.incomeIntervalSeconds * 1000 - _msSinceClaim;
+    if (_bankedTicks > 0) return 0;
+    final int tickMs = AirportEvolution.incomeIntervalSeconds * 1000;
+    final int leftMs = tickMs - _msSinceClaim;
     return leftMs <= 0 ? 0 : (leftMs / 1000).ceil();
   }
 
@@ -420,6 +404,17 @@ class ProgressService extends ChangeNotifier {
     if (!airportUnlocked || airportMaxed) return null;
     final int cost = airportUpgradeCost;
     if (_coins < cost) return null;
+
+    // Самое первое улучшение заводит банк дохода с нуля, а не с
+    // 1970 года: без этого первый же расчёт _bankedTicks увидел бы
+    // разницу в полвека и мгновенно засыпал бы банк до потолка.
+    if (_airportLevel == 0) {
+      _airportIncomeClaimedAt = DateTime.now().millisecondsSinceEpoch;
+      await _storage.setInt(
+        StorageKeys.airportIncomeClaimedAt,
+        _airportIncomeClaimedAt,
+      );
+    }
 
     _coins -= cost;
     _airportLevel++;
@@ -438,11 +433,17 @@ class ProgressService extends ChangeNotifier {
     return reward;
   }
 
-  /// Забрать доход. Возвращает 0, если пятиминутка ещё не прошла.
+  /// Забрать всё, что накопилось в банке. Возвращает 0, если банк
+  /// пуст. Метка времени продвигается ровно на забранные тики, а не
+  /// сбрасывается на «сейчас» - дробный прогресс к следующей
+  /// пятиминутке не сгорает, а остаётся в зачёт.
   Future<int> claimAirportIncome() async {
-    if (!airportIncomeReady) return 0;
-    final int amount = airportClaimAmount;
-    _airportIncomeClaimedAt = DateTime.now().millisecondsSinceEpoch;
+    final int ticks = _bankedTicks;
+    if (ticks <= 0) return 0;
+
+    final int amount = ticks * airportClaimAmount;
+    final int tickMs = AirportEvolution.incomeIntervalSeconds * 1000;
+    _airportIncomeClaimedAt += ticks * tickMs;
     _coins += amount;
     await _storage.setInt(
       StorageKeys.airportIncomeClaimedAt,
@@ -479,11 +480,11 @@ class ProgressService extends ChangeNotifier {
   /// а не к классу напрямую.
   int get dailyBonusCoinsValue => dailyBonusCoins;
 
-  bool get dailyBonusReady => _coinsBonusDay != DailyFlight.todayKey();
+  bool get dailyBonusReady => _coinsBonusDay != DailyKeys.todayKey();
 
   Future<int> claimDailyBonus() async {
     if (!dailyBonusReady) return 0;
-    _coinsBonusDay = DailyFlight.todayKey();
+    _coinsBonusDay = DailyKeys.todayKey();
     _coins += dailyBonusCoins;
     await _storage.setInt(StorageKeys.coinsDailyBonusDay, _coinsBonusDay);
     await _storage.setInt(StorageKeys.coins, _coins);
@@ -598,7 +599,7 @@ class ProgressService extends ChangeNotifier {
   /// неделю, получил бы двадцать одну штуку и прошёл полигры подсказками.
   /// Купленные и полученные за рекламу сверх трёх при этом не сгорают.
   Future<void> refreshDailyHints() async {
-    final int today = DailyFlight.todayKey();
+    final int today = DailyKeys.todayKey();
     if (_hintsRefillDay == today) return;
 
     _hintsRefillDay = today;
@@ -655,11 +656,6 @@ class ProgressService extends ChangeNotifier {
     _ownedSkins = <String>{PlaneSkins.defaultId};
     _equippedSkin = PlaneSkins.defaultId;
     _hintsRefillDay = 0;
-    _dailyLast = 0;
-    _dailyStreak = 0;
-    _dailyBestStreak = 0;
-    _dailyStars = 0;
-    _dailyReward = 0;
     _airportLevel = 0;
     _airportIncomeClaimedAt = 0;
     _coinsBonusDay = 0;
@@ -687,11 +683,6 @@ class ProgressService extends ChangeNotifier {
     );
     await _storage.setString(StorageKeys.equippedSkin, PlaneSkins.defaultId);
     await _storage.setInt(StorageKeys.hintsRefillDay, 0);
-    await _storage.setInt(StorageKeys.dailyLast, 0);
-    await _storage.setInt(StorageKeys.dailyStreak, 0);
-    await _storage.setInt(StorageKeys.dailyBestStreak, 0);
-    await _storage.setInt(StorageKeys.dailyStars, 0);
-    await _storage.setInt(StorageKeys.dailyReward, 0);
     _recountStats();
     notifyListeners();
   }

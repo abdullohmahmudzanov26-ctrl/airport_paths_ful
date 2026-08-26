@@ -12,7 +12,6 @@ import '../theme/app_palette.dart';
 import '../theme/app_text_styles.dart';
 import '../widgets/airport_backdrop.dart';
 import '../widgets/animated_entrance.dart';
-import '../widgets/app_panel.dart';
 import '../widgets/game_button.dart';
 import '../widgets/game_logo.dart';
 import '../widgets/icon_plate_button.dart';
@@ -21,7 +20,7 @@ import '../widgets/stat_chip.dart';
 /// Главное меню: логотип, четыре кнопки и ряд круглых иконок.
 ///
 /// Настройки и «об игре» ушли в нижний ряд, чтобы освободить место
-/// рейсу дня и магазину - именно они возвращают игрока завтра.
+/// магазину и своему аэропорту - именно они возвращают игрока завтра.
 class MainMenuScreen extends StatelessWidget {
   const MainMenuScreen({super.key});
 
@@ -36,106 +35,6 @@ class MainMenuScreen extends StatelessWidget {
     );
   }
 
-  void _openDaily(BuildContext context) {
-    if (Services.progress.dailyDoneToday) {
-      _showStreak(context);
-      return;
-    }
-    Navigator.of(context).pushNamed(
-      Routes.game,
-      arguments: const GameArgs(levelId: 0, isDaily: true),
-    );
-  }
-
-  /// Рейс уже пройден - показываем итог дня: звёзды, серию, награду.
-  void _showStreak(BuildContext context) {
-    final AppPalette p = context.palette;
-    final int stars = Services.progress.dailyStars;
-
-    showDialog<void>(
-      context: context,
-      barrierColor: Colors.black.withOpacity(0.66),
-      builder: (BuildContext context) => Dialog(
-        backgroundColor: Colors.transparent,
-        elevation: 0,
-        child: AppPanel(
-          padding: const EdgeInsets.fromLTRB(20, 22, 20, 20),
-          child: Column(
-            mainAxisSize: MainAxisSize.min,
-            children: <Widget>[
-              Text(
-                tr('todays_flight'),
-                style: AppText.caption
-                    .copyWith(color: p.textMuted, letterSpacing: 1.4),
-              ),
-              const SizedBox(height: 12),
-              // Результат дня: сколько звёзд заработано на общей карте.
-              Row(
-                mainAxisAlignment: MainAxisAlignment.center,
-                children: <Widget>[
-                  for (int i = 0; i < 3; i++)
-                    Padding(
-                      padding: const EdgeInsets.symmetric(horizontal: 3),
-                      child: Icon(
-                        i < stars
-                            ? Icons.star_rounded
-                            : Icons.star_outline_rounded,
-                        size: 38,
-                        color: i < stars ? p.star : p.starEmpty,
-                      ),
-                    ),
-                ],
-              ),
-              const SizedBox(height: 16),
-              Row(
-                mainAxisAlignment: MainAxisAlignment.center,
-                children: <Widget>[
-                  Icon(Icons.local_fire_department_rounded,
-                      size: 26, color: p.primary.top),
-                  const SizedBox(width: 6),
-                  Text(
-                    '${Services.progress.dailyStreak}',
-                    style:
-                        AppText.logo.copyWith(fontSize: 30, color: p.textPrimary),
-                  ),
-                  const SizedBox(width: 18),
-                  Icon(Icons.monetization_on_rounded, size: 22, color: p.coin),
-                  const SizedBox(width: 6),
-                  Text(
-                    '+${Services.progress.dailyReward}',
-                    style: AppText.value.copyWith(color: p.textPrimary),
-                  ),
-                ],
-              ),
-              const SizedBox(height: 4),
-              Text(
-                tr('streak'),
-                style: AppText.caption.copyWith(color: p.textMuted),
-              ),
-              const SizedBox(height: 14),
-              Text(
-                tr('daily_done'),
-                textAlign: TextAlign.center,
-                style: AppText.body.copyWith(color: p.textSecondary),
-              ),
-              const SizedBox(height: 8),
-              Text(
-                '${tr('best_streak')}: ${Services.progress.dailyBestStreak}',
-                style: AppText.caption.copyWith(color: p.textMuted),
-              ),
-              const SizedBox(height: 18),
-              GameButton(
-                label: tr('resume'),
-                width: 220,
-                onPressed: () => Navigator.of(context).pop(),
-              ),
-            ],
-          ),
-        ),
-      ),
-    );
-  }
-
   @override
   Widget build(BuildContext context) {
     final AppPalette p = context.palette;
@@ -144,7 +43,13 @@ class MainMenuScreen extends StatelessWidget {
       body: AirportBackdrop(
         child: SafeArea(
           child: AnimatedBuilder(
-            animation: Services.progress,
+            // Раньше слушал только Services.progress - смена языка
+            // в настройках и возврат в меню показывали старый текст,
+            // пока что-нибудь ещё (например, изменение монет) не
+            // перестраивало экран заново.
+            animation: Listenable.merge(
+              <Listenable>[Services.progress, Services.settings],
+            ),
             builder: (BuildContext context, _) {
               return LayoutBuilder(
                 builder: (BuildContext context, BoxConstraints c) {
@@ -179,7 +84,6 @@ class MainMenuScreen extends StatelessWidget {
                       _MenuButtons(
                         width: width,
                         onPlay: () => _openCurrentLevel(context),
-                        onDaily: () => _openDaily(context),
                       ),
                       SizedBox(height: compact ? 14 : 24),
                       const _MenuFooter(),
@@ -230,8 +134,7 @@ class _AirportAmbienceState extends State<_AirportAmbience> {
   /// Следующий взлёт планируется только после предыдущего, поэтому
   /// два звука никогда не накладываются друг на друга.
   void _schedule() {
-    final int wait =
-        _minSeconds + _rnd.nextInt(_maxSeconds - _minSeconds + 1);
+    final int wait = _minSeconds + _rnd.nextInt(_maxSeconds - _minSeconds + 1);
     _timer?.cancel();
     _timer = Timer(Duration(seconds: wait), () {
       if (!mounted) return;
@@ -258,17 +161,13 @@ class _MenuButtons extends StatelessWidget {
   const _MenuButtons({
     required this.width,
     required this.onPlay,
-    required this.onDaily,
   });
 
   final double width;
   final VoidCallback onPlay;
-  final VoidCallback onDaily;
 
   @override
   Widget build(BuildContext context) {
-    final bool dailyReady = !Services.progress.dailyDoneToday;
-
     final List<Widget> buttons = <Widget>[
       // PLAY - главный акцент экрана: выше остальных, с подписью
       // текущего уровня, чтобы сразу было видно, куда возвращаешься.
@@ -293,7 +192,7 @@ class _MenuButtons extends StatelessWidget {
                 child: Text(
                   '${tr('level')} ${Services.progress.currentLevel}',
                   style: AppText.caption.copyWith(
-                    color: Colors.white.withOpacity(0.9),
+                    color: Colors.white.withValues(alpha: 0.9),
                     letterSpacing: 0.8,
                   ),
                 ),
@@ -301,15 +200,6 @@ class _MenuButtons extends StatelessWidget {
             ),
           ],
         ),
-      ),
-      GameButton(
-        label: tr('daily'),
-        icon: Icons.local_fire_department_rounded,
-        kind: dailyReady ? GameButtonKind.success : GameButtonKind.neutral,
-        width: width,
-        // Точка-напоминание, что сегодняшний рейс ещё не пройден.
-        badge: dailyReady ? null : Services.progress.dailyStreak,
-        onPressed: onDaily,
       ),
       GameButton(
         label: tr('levels'),
@@ -333,7 +223,7 @@ class _MenuButtons extends StatelessWidget {
         width: width,
         // Точка-напоминание, когда доход ещё не забран.
         badge: Services.progress.airportIncomeReady
-            ? Services.progress.airportClaimAmount
+            ? Services.progress.airportBankedAmount
             : null,
         onPressed: () => Navigator.of(context).pushNamed(Routes.myAirport),
       ),

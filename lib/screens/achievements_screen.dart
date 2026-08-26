@@ -25,7 +25,9 @@ class AchievementsScreen extends StatelessWidget {
         animatePlane: false,
         child: SafeArea(
           child: AnimatedBuilder(
-            animation: Services.progress,
+            animation: Listenable.merge(
+              <Listenable>[Services.progress, Services.settings],
+            ),
             builder: (BuildContext context, _) {
               final int unlocked =
                   Services.progress.unlockedAchievements.length;

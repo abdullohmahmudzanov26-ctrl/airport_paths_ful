@@ -3,6 +3,7 @@ import 'audio_service.dart';
 import 'boss_service.dart';
 import 'haptic_service.dart';
 import 'progress_service.dart';
+import 'purchase_service.dart';
 import 'settings_service.dart';
 import 'storage_service.dart';
 
@@ -18,6 +19,12 @@ class Services {
   static final ProgressService progress = ProgressService(storage);
   static final AdService ads = AdService(storage);
 
+  /// Донат за реальные деньги - монеты, подсказки и разовые наборы.
+  /// Реальной оплаты пока нет (см. PurchaseService._processPayment),
+  /// но весь каталог, экраны и владение нерасходуемыми товарами уже
+  /// работают на заглушке.
+  static final PurchaseService purchases = PurchaseService(storage);
+
   /// Состояние босс-лабиринтов: попытки и блокировка. Читает то же
   /// хранилище, что и остальные сервисы, отдельной загрузки не требует.
   static final BossService boss = BossService(storage);
@@ -32,6 +39,7 @@ class Services {
     await settings.load();
     await progress.load();
     await ads.load();
+    await purchases.load();
     await audio.init();
     _initialized = true;
   }

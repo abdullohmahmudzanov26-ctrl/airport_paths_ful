@@ -33,12 +33,9 @@ class Routes {
 
 /// Аргументы игрового экрана.
 class GameArgs {
-  const GameArgs({required this.levelId, this.isDaily = false});
+  const GameArgs({required this.levelId});
 
   final int levelId;
-
-  /// Рейс дня: карта берётся из даты, прогресс уровней не трогается.
-  final bool isDaily;
 }
 
 class AppRouter {
@@ -77,18 +74,14 @@ class AppRouter {
       case Routes.game:
         final Object? args = settings.arguments;
         final int levelId = args is GameArgs ? args.levelId : 1;
-        final bool isDaily = args is GameArgs && args.isDaily;
         // Каждый десятый уровень - босс-лабиринт. Подмена делается
         // здесь, в одной точке: и меню, и сетка уровней, и кнопка
         // «следующий уровень» ходят через этот же маршрут, поэтому
-        // менять их не пришлось. Рейс дня боссом не становится.
-        if (!isDaily && BossConfig.isBoss(levelId)) {
+        // менять их не пришлось.
+        if (BossConfig.isBoss(levelId)) {
           return _fade(BossMazeScreen(levelId: levelId), settings);
         }
-        return _fade(
-          GameScreen(levelId: levelId, isDaily: isDaily),
-          settings,
-        );
+        return _fade(GameScreen(levelId: levelId), settings);
       default:
         return _fade(const MainMenuScreen(), settings);
     }

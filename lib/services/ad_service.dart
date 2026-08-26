@@ -1,6 +1,6 @@
 import 'package:flutter/foundation.dart';
 
-import '../data/daily_flight.dart';
+import '../data/daily_keys.dart';
 import 'storage_service.dart';
 
 /// Награды за просмотр рекламы и дневной лимит показов.
@@ -59,7 +59,7 @@ class AdService extends ChangeNotifier {
   bool get canWatchBonus => bonusLeftToday > 0 && !_showing;
 
   void _rolloverIfNeeded() {
-    final int today = DailyFlight.todayKey();
+    final int today = DailyKeys.todayKey();
     if (_day != today) {
       _day = today;
       _count = 0;

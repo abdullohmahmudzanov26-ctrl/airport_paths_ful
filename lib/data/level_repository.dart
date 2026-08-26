@@ -1,5 +1,4 @@
 import '../models/level_data.dart';
-import 'daily_flight.dart';
 import 'level_generator.dart';
 
 /// Доступ к уровням. Карты строятся лениво и кэшируются:
@@ -38,17 +37,7 @@ class LevelRepository {
     }
   }
 
-  static final Map<int, LevelData> _dailyCache = <int, LevelData>{};
-
-  /// Карта рейса дня. Кэш по дате, чтобы не строить её заново
-  /// при каждом открытии меню.
-  static LevelData daily(DateTime date) {
-    final int key = DailyFlight.keyFor(date);
-    return _dailyCache.putIfAbsent(key, () => DailyFlight.levelFor(date));
-  }
-
   static void clearCache() {
     _cache.clear();
-    _dailyCache.clear();
   }
 }

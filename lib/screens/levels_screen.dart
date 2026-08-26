@@ -100,7 +100,9 @@ class _LevelsScreenState extends State<LevelsScreen> {
         animatePlane: false,
         child: SafeArea(
           child: AnimatedBuilder(
-            animation: Services.progress,
+            animation: Listenable.merge(
+              <Listenable>[Services.progress, Services.settings],
+            ),
             builder: (BuildContext context, _) {
               return Column(
                 children: <Widget>[

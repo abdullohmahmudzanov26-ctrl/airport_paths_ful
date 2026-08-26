@@ -36,7 +36,6 @@ To save your progress, the App stores the following information locally on your 
 - Levels unlocked and completed, stars earned, best times and move counts, and Perfect Run results
 - Your virtual coin balance and hint count
 - Themes and plane skins you have unlocked and selected
-- Daily Flight streak dates
 - Achievements you have unlocked
 - App preferences (music, sound, vibration, volume, theme, language)
 

@@ -157,7 +157,9 @@ class _MyAirportScreenState extends State<MyAirportScreen> {
         animatePlane: false,
         child: SafeArea(
           child: AnimatedBuilder(
-            animation: Services.progress,
+            animation: Listenable.merge(
+              <Listenable>[Services.progress, Services.settings],
+            ),
             builder: (BuildContext context, _) {
               final bool unlocked = Services.progress.airportUnlocked;
               return Column(
@@ -409,7 +411,7 @@ class _UnlockedBody extends StatelessWidget {
             Expanded(
               child: GameButton(
                 label: incomeReady
-                    ? '${tr('collect')}  ${Services.progress.airportClaimAmount}'
+                    ? '${tr('collect')}  ${Services.progress.airportBankedAmount}'
                     : _formatCountdown(incomeSecondsLeft),
                 icon: Icons.savings_rounded,
                 kind: incomeReady
@@ -429,6 +431,24 @@ class _UnlockedBody extends StatelessWidget {
             tr('need_more_coins'),
             textAlign: TextAlign.center,
             style: AppText.caption.copyWith(color: p.textMuted),
+          ),
+        ],
+
+        // Банк упёрся в потолок - часть времени уже пропадает впустую,
+        // об этом стоит сказать прямо, а не оставлять копиться молча.
+        if (Services.progress.airportBankFull) ...<Widget>[
+          const SizedBox(height: 8),
+          Row(
+            mainAxisAlignment: MainAxisAlignment.center,
+            children: <Widget>[
+              Icon(Icons.warning_amber_rounded, size: 14, color: p.star),
+              const SizedBox(width: 5),
+              Text(
+                tr('airport_bank_full'),
+                textAlign: TextAlign.center,
+                style: AppText.caption.copyWith(color: p.star),
+              ),
+            ],
           ),
         ],
 

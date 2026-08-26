@@ -19,7 +19,6 @@ import 'components/plane_component.dart';
 import 'components/route_layer_component.dart';
 import 'components/tutorial_layer_component.dart';
 import 'dynamic_events.dart';
-import 'components/weather_layer_component.dart';
 import 'systems/collision_system.dart';
 import 'systems/route_controller.dart';
 
@@ -197,13 +196,12 @@ class AirportGame extends FlameGame {
       await add(plane);
     }
 
-    // Чисто декоративный слой поверх сцены - есть у тем со своей
-    // погодой (BoardTheme.weather) и у уровней, где главное событие
-    // задаёт погоду явно (feature.weatherOverride, например туман
-    // или гроза), даже если базовая тема ясная.
-    if (theme.weather != WeatherKind.none || feature.weatherOverride != null) {
-      await add(WeatherLayerComponent(this));
-    }
+    // Слой погоды (дождь/снег/туман) убран по просьбе игрока - мешал
+    // и отъедал часть кадра на каждом уровне, где тема или событие его
+    // включали. WeatherKind у тем и feature.weatherOverride в данных
+    // остались нетронутыми - на них ещё завязана мелкая неигровая
+    // логика (см. RouteLayerComponent, приглушение огней в тумане),
+    // просто сам компонент больше никогда не добавляется на сцену.
 
     _syncHud();
   }

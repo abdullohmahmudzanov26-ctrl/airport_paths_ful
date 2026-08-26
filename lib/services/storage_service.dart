@@ -13,11 +13,6 @@ class StorageKeys {
   static const String hintFreePerfects = 'hint_free_perfects';
   static const String ownedThemes = 'owned_themes';
   static const String equippedTheme = 'equipped_theme';
-  static const String dailyLast = 'daily_last';
-  static const String dailyStreak = 'daily_streak';
-  static const String dailyBestStreak = 'daily_best_streak';
-  static const String dailyStars = 'daily_stars';
-  static const String dailyReward = 'daily_reward';
   static const String ownedSkins = 'owned_skins';
   static const String equippedSkin = 'equipped_skin';
   static const String hintsRefillDay = 'hints_refill_day';
@@ -27,6 +22,7 @@ class StorageKeys {
   static const String adsBonusCount = 'ads_bonus_count';
   static const String coinsDailyBonusDay = 'coins_daily_bonus_day';
   static const String doubleRewardArmed = 'double_reward_armed';
+  static const String iapOwned = 'iap_owned';
   static const String airportLevel = 'airport_level';
 
   /// Заменил airport_income_day: теперь хранится момент сбора

@@ -6,13 +6,14 @@ import '../app/routes.dart';
 import '../data/airport_evolution.dart';
 import '../data/app_strings.dart';
 import '../data/board_themes.dart';
+import '../data/iap_catalog.dart';
 import '../data/level_repository.dart';
 import '../data/plane_abilities.dart';
 import '../data/plane_skins.dart';
 import '../models/board_theme.dart';
+import '../models/iap_product.dart';
 import '../models/plane_ability.dart';
 import '../models/plane_skin.dart';
-import '../services/ad_service.dart';
 import '../services/audio_service.dart';
 import '../services/service_locator.dart';
 import '../theme/app_palette.dart';
@@ -22,6 +23,7 @@ import '../widgets/animated_entrance.dart';
 import '../widgets/app_panel.dart';
 import '../widgets/boss_overlays.dart' show AbilityBadge;
 import '../widgets/game_button.dart';
+import '../widgets/iap_product_card.dart';
 import '../widgets/responsive_center.dart';
 import '../widgets/screen_header.dart';
 import '../widgets/stat_chip.dart';
@@ -102,22 +104,15 @@ class _ShopScreenState extends State<ShopScreen>
     }
   }
 
-  /// Награда начисляется только после честно досмотренного ролика.
-  Future<void> _watchAd({required bool forCoins}) async {
-    if (!Services.ads.canWatch) {
-      _toast(tr('no_ads_left'), good: false);
+  /// Награда начисляется только после подтверждённой оплаты - сервис
+  /// сам не даст купить нерасходуемый товар второй раз.
+  Future<void> _buyIap(IapProduct product) async {
+    final bool success = await Services.purchases.buy(product);
+    if (!success) {
+      _toast(tr('purchase_failed'), good: false);
       return;
     }
-    final bool rewarded = await Services.ads.showRewarded();
-    if (!rewarded) {
-      _toast(tr('ad_failed'), good: false);
-      return;
-    }
-    if (forCoins) {
-      await Services.progress.rewardCoins(AdService.coinsPerAd);
-    } else {
-      await Services.progress.rewardHints(AdService.hintsPerAd);
-    }
+    await Services.progress.grantIapReward(product);
     Services.audio.play(Sfx.star);
     Services.haptics.success();
     _toast(tr('reward_received'));
@@ -134,7 +129,7 @@ class _ShopScreenState extends State<ShopScreen>
         child: SafeArea(
           child: AnimatedBuilder(
             animation: Listenable.merge(
-              <Listenable>[Services.progress, Services.ads],
+              <Listenable>[Services.progress, Services.purchases, Services.settings],
             ),
             builder: (BuildContext context, _) {
               return Column(
@@ -280,8 +275,8 @@ class _ShopScreenState extends State<ShopScreen>
         return _buildExclusiveTab(context);
       default:
         return _ExtrasTab(
-          onWatchCoins: () => _watchAd(forCoins: true),
-          onWatchHints: () => _watchAd(forCoins: false),
+          onBuyCoinsPack: () => _buyIap(IapCatalog.coinsPocket),
+          onBuyHintsPack: () => _buyIap(IapCatalog.hintsSmall),
           onBuyHints: () => _buy(
             () => Services.progress.buyHints(
               count: ShopScreen.hintPackSize,
@@ -886,12 +881,10 @@ class _PaintKit {
   final Paint tail = Paint();
   final Paint detail = Paint();
   final Paint cockpit = Paint()..color = const Color(0xCC0E2439);
-  // Мягкая тень, как и в самой игре: тот же приём, MaskFilter вместо
-  // жёсткого силуэта - карточка магазина не должна выглядеть беднее
-  // борта в полёте.
-  final Paint shadow = Paint()
-    ..color = const Color(0x40000000)
-    ..maskFilter = const MaskFilter.blur(BlurStyle.normal, 0.03);
+  // Плоская тень без MaskFilter.blur - тот же перегиб по кадру, что и
+  // в самой игре, тут не так критичен (карточек мало и они статичны),
+  // но лучше держать один дешёвый приём везде, а не два разных.
+  final Paint shadow = Paint()..color = const Color(0x40000000);
   final Paint disc = Paint()..color = const Color(0x33FFFFFF);
   final Paint glow = Paint()
     ..style = PaintingStyle.stroke
@@ -1116,65 +1109,56 @@ class _ThemePainter extends CustomPainter {
   bool shouldRepaint(covariant _ThemePainter old) => old.theme.id != theme.id;
 }
 
-/// Вкладка «Extras»: бесплатные монеты и подсказки за рекламу
+/// Вкладка «Extras»: витрина доната (полный каталог - в COINS SHOP)
 /// плюс покупка подсказок за монеты.
 class _ExtrasTab extends StatelessWidget {
   const _ExtrasTab({
-    required this.onWatchCoins,
-    required this.onWatchHints,
+    required this.onBuyCoinsPack,
+    required this.onBuyHintsPack,
     required this.onBuyHints,
   });
 
-  final VoidCallback onWatchCoins;
-  final VoidCallback onWatchHints;
+  final VoidCallback onBuyCoinsPack;
+  final VoidCallback onBuyHintsPack;
   final VoidCallback onBuyHints;
 
   @override
   Widget build(BuildContext context) {
     final AppPalette p = context.palette;
-    final int left = Services.ads.leftToday;
-    final bool busy = Services.ads.isShowing;
+    final bool processing = Services.purchases.isProcessing;
 
     return ListView(
       padding: const EdgeInsets.fromLTRB(18, 0, 18, 24),
       children: <Widget>[
         Padding(
           padding: const EdgeInsets.fromLTRB(4, 4, 4, 10),
-          child: Row(
-            children: <Widget>[
-              Text(
-                tr('free_coins'),
-                style: AppText.caption
-                    .copyWith(color: p.textMuted, letterSpacing: 1.6),
-              ),
-              const Spacer(),
-              Text(
-                '${tr('ads_left')}: $left',
-                style: AppText.caption.copyWith(
-                  color: left > 0 ? p.textSecondary : p.danger.top,
-                ),
-              ),
-            ],
+          child: Text(
+            tr('cs_donate'),
+            style: AppText.caption
+                .copyWith(color: p.textMuted, letterSpacing: 1.6),
           ),
         ),
-        _RewardCard(
-          icon: Icons.monetization_on_rounded,
-          iconColor: p.coin,
-          title: '+${AdService.coinsPerAd}',
-          subtitle: tr('watch_ad'),
-          enabled: left > 0 && !busy,
-          busy: busy,
-          onTap: onWatchCoins,
+        IapProductCard(
+          product: IapCatalog.coinsPocket,
+          owned: false,
+          processing: processing,
+          onBuy: onBuyCoinsPack,
         ),
         const SizedBox(height: 10),
-        _RewardCard(
-          icon: Icons.lightbulb_rounded,
-          iconColor: p.primary.top,
-          title: '+${AdService.hintsPerAd}',
-          subtitle: tr('watch_ad'),
-          enabled: left > 0 && !busy,
-          busy: busy,
-          onTap: onWatchHints,
+        IapProductCard(
+          product: IapCatalog.hintsSmall,
+          owned: false,
+          processing: processing,
+          onBuy: onBuyHintsPack,
+        ),
+        const SizedBox(height: 10),
+        GameButton(
+          label: tr('cs_see_all'),
+          icon: Icons.storefront_rounded,
+          kind: GameButtonKind.secondary,
+          height: 48,
+          textStyle: AppText.buttonSmall,
+          onPressed: () => Navigator.of(context).pushNamed(Routes.coinsShop),
         ),
         Padding(
           padding: const EdgeInsets.fromLTRB(4, 20, 4, 10),
@@ -1211,81 +1195,6 @@ class _ExtrasTab extends StatelessWidget {
           style: AppText.caption.copyWith(color: p.textMuted),
         ),
       ],
-    );
-  }
-}
-
-class _RewardCard extends StatelessWidget {
-  const _RewardCard({
-    required this.icon,
-    required this.iconColor,
-    required this.title,
-    required this.subtitle,
-    required this.enabled,
-    required this.busy,
-    required this.onTap,
-  });
-
-  final IconData icon;
-  final Color iconColor;
-  final String title;
-  final String subtitle;
-  final bool enabled;
-  final bool busy;
-  final VoidCallback onTap;
-
-  @override
-  Widget build(BuildContext context) {
-    final AppPalette p = context.palette;
-
-    return AppPanel(
-      radius: 18,
-      padding: const EdgeInsets.all(12),
-      child: Row(
-        children: <Widget>[
-          Container(
-            width: 62,
-            height: 62,
-            alignment: Alignment.center,
-            decoration: BoxDecoration(
-              borderRadius: BorderRadius.circular(12),
-              color: Colors.black.withOpacity(0.26),
-              border: Border.all(color: p.panelBorder.withOpacity(0.4)),
-            ),
-            child: Icon(icon, size: 30, color: iconColor),
-          ),
-          const SizedBox(width: 14),
-          Expanded(
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: <Widget>[
-                Text(
-                  title,
-                  style: AppText.value.copyWith(color: p.textPrimary),
-                ),
-                const SizedBox(height: 2),
-                Text(
-                  subtitle,
-                  style: AppText.caption.copyWith(color: p.textMuted),
-                ),
-              ],
-            ),
-          ),
-          const SizedBox(width: 8),
-          SizedBox(
-            width: 100,
-            child: GameButton(
-              label: busy ? '...' : tr('watch'),
-              icon: busy ? null : Icons.play_circle_fill_rounded,
-              kind: enabled ? GameButtonKind.success : GameButtonKind.locked,
-              height: 42,
-              depth: 4,
-              textStyle: AppText.caption,
-              onPressed: enabled ? onTap : null,
-            ),
-          ),
-        ],
-      ),
     );
   }
 }

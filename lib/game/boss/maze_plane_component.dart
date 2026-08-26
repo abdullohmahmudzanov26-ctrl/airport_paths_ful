@@ -26,9 +26,10 @@ class MazePlaneComponent extends Component {
 
   double _idle = 0;
 
-  final Paint _shadowPaint = Paint()
-    ..color = const Color(0x4D000000)
-    ..maskFilter = const MaskFilter.blur(BlurStyle.normal, 0.028);
+  // Плоская тень без MaskFilter.blur - см. plane_component.dart:
+  // размытие стоило отдельного прохода растеризации каждый кадр,
+  // здесь борт всего один, но эффект тот же на любом счётчике.
+  final Paint _shadowPaint = Paint()..color = const Color(0x40000000);
   final Paint _bodyPaint = Paint();
   final Paint _wingPaint = Paint();
   final Paint _tailPaint = Paint();
