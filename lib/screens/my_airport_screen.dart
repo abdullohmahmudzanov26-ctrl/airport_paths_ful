@@ -12,6 +12,7 @@ import '../services/audio_service.dart';
 import '../services/service_locator.dart';
 import '../theme/app_palette.dart';
 import '../theme/app_text_styles.dart';
+import '../widgets/airport_3d_view.dart';
 import '../widgets/airport_backdrop.dart';
 import '../widgets/app_panel.dart';
 import '../widgets/game_button.dart';
@@ -301,7 +302,10 @@ class _UnlockedBody extends StatelessWidget {
     return ListView(
       padding: const EdgeInsets.fromLTRB(18, 4, 18, 24),
       children: <Widget>[
-        _AirportView(level: level),
+        Airport3DView(
+          level: level,
+          fallback: _AirportView(level: level),
+        ),
         const SizedBox(height: 12),
 
         // Крупно: какой сейчас уровень и как называется эпоха.
