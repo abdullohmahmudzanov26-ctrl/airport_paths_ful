@@ -942,6 +942,53 @@ class PlaneSkins {
     detailOpacity: 0.6,
   );
 
+  // -------------------------------------------------- первый вызов
+  // В магазине его нет: выдаётся бесплатно за прохождение уровня 3 -
+  // первого по-настоящему сложного (см. SuperMilestones, level: 3).
+
+  /// Потрёпанный, но гордый силуэт - с этого борта начинается серьёзная
+  /// игра. Скруглённый нос и один смещённый киль читаются как «летал
+  /// не по учебнику», в отличие от строгих геометричных бортов выше.
+  static final PlaneSkin underdog = PlaneSkin(
+    id: 'underdog',
+    nameKey: 'skin_underdog',
+    price: 0,
+    category: SkinCategory.aircraft,
+    exclusive: true,
+    body: Path()
+      ..moveTo(0, -0.46)
+      ..cubicTo(0.10, -0.38, 0.13, -0.16, 0.12, 0.06)
+      ..cubicTo(0.11, 0.24, 0.09, 0.36, 0.07, 0.42)
+      ..lineTo(-0.07, 0.42)
+      ..cubicTo(-0.09, 0.36, -0.11, 0.24, -0.12, 0.06)
+      ..cubicTo(-0.13, -0.16, -0.10, -0.38, 0, -0.46)
+      ..close(),
+    tail: Path()
+      ..moveTo(0.02, 0.20)
+      ..lineTo(0.22, 0.44)
+      ..lineTo(0.10, 0.44)
+      ..lineTo(0.01, 0.30)
+      ..close(),
+    wings: Path()
+      ..moveTo(0.10, -0.06)
+      ..lineTo(0.46, 0.10)
+      ..lineTo(0.44, 0.20)
+      ..lineTo(0.09, 0.12)
+      ..close()
+      ..moveTo(-0.10, -0.06)
+      ..lineTo(-0.46, 0.10)
+      ..lineTo(-0.44, 0.20)
+      ..lineTo(-0.09, 0.12)
+      ..close(),
+    cockpit: Path()..addOval(const Rect.fromLTWH(-0.045, -0.30, 0.09, 0.12)),
+    details: Path()
+      ..addRRect(RRect.fromRectAndRadius(
+        const Rect.fromLTWH(-0.03, 0.02, 0.06, 0.18),
+        const Radius.circular(0.02),
+      )),
+    detailOpacity: 0.5,
+  );
+
   // ------------------------------- награды за развитие аэропорта
   // В магазине их нет: выдаются только за уровни MY AIRPORT.
 
@@ -1111,6 +1158,7 @@ class PlaneSkins {
     rocketRaider,
     rocketVoyager,
     rocketNova,
+    underdog,
     founderJet,
     skylineCruiser,
     goldenArrow,

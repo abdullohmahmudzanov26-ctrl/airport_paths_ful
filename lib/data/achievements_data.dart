@@ -78,6 +78,13 @@ class AchievementsCatalog {
       test: _flawless,
     ),
     Achievement(
+      id: 'super_3',
+      titleKey: 'ach_super3_title',
+      descriptionKey: 'ach_super3_desc',
+      icon: Icons.military_tech_rounded,
+      test: _super3,
+    ),
+    Achievement(
       id: 'super_50',
       titleKey: 'ach_super50_title',
       descriptionKey: 'ach_super50_desc',
@@ -134,6 +141,7 @@ class AchievementsCatalog {
 
   static bool _flawless(AchievementStats s) => s.perfectRuns >= 5;
 
+  static bool _super3(AchievementStats s) => s.completedLevels >= 3;
   static bool _super50(AchievementStats s) => s.completedLevels >= 50;
   static bool _super100(AchievementStats s) => s.completedLevels >= 100;
   static bool _super150(AchievementStats s) => s.completedLevels >= 150;

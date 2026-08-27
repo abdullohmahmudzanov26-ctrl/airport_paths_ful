@@ -2,6 +2,7 @@ import 'ad_service.dart';
 import 'audio_service.dart';
 import 'boss_service.dart';
 import 'haptic_service.dart';
+import 'lives_service.dart';
 import 'progress_service.dart';
 import 'purchase_service.dart';
 import 'settings_service.dart';
@@ -29,6 +30,10 @@ class Services {
   /// хранилище, что и остальные сервисы, отдельной загрузки не требует.
   static final BossService boss = BossService(storage);
 
+  /// Жизни на обычных уровнях: не уложился во время - минус одна,
+  /// восстанавливаются по одной за 30 секунд, даже пока игра закрыта.
+  static final LivesService lives = LivesService(storage);
+
   static bool _initialized = false;
 
   static bool get isInitialized => _initialized;
@@ -40,6 +45,7 @@ class Services {
     await progress.load();
     await ads.load();
     await purchases.load();
+    await lives.load();
     await audio.init();
     _initialized = true;
   }

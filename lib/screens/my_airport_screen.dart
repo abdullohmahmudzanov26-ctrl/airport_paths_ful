@@ -412,7 +412,9 @@ class _UnlockedBody extends StatelessWidget {
               child: GameButton(
                 label: incomeReady
                     ? '${tr('collect')}  ${Services.progress.airportBankedAmount}'
-                    : _formatCountdown(incomeSecondsLeft),
+                    : (Services.progress.airportDailyLimitReached
+                        ? tr('airport_daily_done')
+                        : _formatCountdown(incomeSecondsLeft)),
                 icon: Icons.savings_rounded,
                 kind: incomeReady
                     ? GameButtonKind.success
@@ -434,9 +436,31 @@ class _UnlockedBody extends StatelessWidget {
           ),
         ],
 
-        // Банк упёрся в потолок - часть времени уже пропадает впустую,
-        // об этом стоит сказать прямо, а не оставлять копиться молча.
-        if (Services.progress.airportBankFull) ...<Widget>[
+        // Дневной потолок (3000 монет) выбран целиком - это отдельное
+        // состояние от «банк набит битком»: тут дело не во времени,
+        // а в том, что на сегодня заработок закончился совсем, и без
+        // объяснения кнопка с «0:00» выглядела бы как баг, а не как
+        // осознанный лимит.
+        if (Services.progress.airportDailyLimitReached) ...<Widget>[
+          const SizedBox(height: 8),
+          Row(
+            mainAxisAlignment: MainAxisAlignment.center,
+            children: <Widget>[
+              Icon(Icons.check_circle_rounded, size: 14, color: p.success.top),
+              const SizedBox(width: 5),
+              Text(
+                tr('airport_daily_limit_hint'),
+                textAlign: TextAlign.center,
+                style: AppText.caption.copyWith(color: p.success.top),
+              ),
+            ],
+          ),
+        ] else if (Services.progress.airportBankFull) ...<Widget>[
+          // Банк упёрся в часовой потолок - часть времени уже пропадает
+          // впустую, об этом стоит сказать прямо, а не оставлять
+          // копиться молча. Не показываем одновременно с дневным
+          // сообщением выше - это были бы два предупреждения об одном
+          // и том же по сути «пора забрать монеты».
           const SizedBox(height: 8),
           Row(
             mainAxisAlignment: MainAxisAlignment.center,

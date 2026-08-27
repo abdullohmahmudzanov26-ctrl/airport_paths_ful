@@ -7,6 +7,7 @@ import '../app/routes.dart';
 import '../data/app_strings.dart';
 import '../data/board_themes.dart';
 import '../data/iap_catalog.dart';
+import '../data/level_timing.dart';
 import '../data/plane_skins.dart';
 import '../data/level_repository.dart';
 import '../game/airport_game.dart';
@@ -28,6 +29,7 @@ import '../data/super_milestones.dart';
 import '../widgets/level_intel_panel.dart';
 import '../widgets/pause_overlay.dart';
 import '../widgets/super_milestone_overlay.dart';
+import '../widgets/level_time_up_overlay.dart';
 import '../widgets/responsive_center.dart';
 import '../widgets/win_overlay.dart';
 import '../widgets/screen_header.dart';
@@ -65,6 +67,24 @@ class _GameScreenState extends State<GameScreen> with WidgetsBindingObserver {
   /// (жизненный цикл уже ставит паузу), поэтому фон не засчитывается.
   Timer? _playClock;
 
+  /// Не уложился в лимит уровня - показывается оверлей с оставшимися
+  /// жизнями (см. LevelTimeUpOverlay). Живёт отдельно от _result:
+  /// _result - это победа, timeUp - её противоположность по времени,
+  /// а не столкновение (у того своя отдельная ветка, _handleCrash).
+  bool _timeUp = false;
+
+  /// Живая копия Services.lives.livesLeft - обновляется тикером, чтобы
+  /// HUD и оверлей не читали сервис на каждую перерисовку сами.
+  int _livesLeft = Services.lives.livesLeft;
+
+  /// Живой отсчёт до следующей восстановленной жизни. 0, если жизни
+  /// есть и ждать нечего.
+  int _lockSecondsLeft = 0;
+
+  /// Тикает раз в секунду, пока не хватает жизней - обновляет только
+  /// _livesLeft/_lockSecondsLeft, не трогает игровое время.
+  Timer? _livesTicker;
+
   @override
   void initState() {
     super.initState();
@@ -87,17 +107,30 @@ class _GameScreenState extends State<GameScreen> with WidgetsBindingObserver {
       // которые можно надеть или снять по желанию.
       theme: BoardThemes.byId(Services.progress.equippedTheme),
       skin: PlaneSkins.byId(Services.progress.equippedSkin),
+      timeLimitSeconds: LevelTiming.forLevel(widget.levelId),
       onLevelComplete: _handleWin,
       onCrash: _handleCrash,
+      onTimeUp: _handleTimeUp,
     );
     Services.audio.playMusic(MusicTrack.game);
     Services.progress.rememberCurrentLevel(widget.levelId);
     LevelRepository.warmUp(widget.levelId + 1);
+
+    // Зашёл без единой жизни (потратил все на предыдущем уровне и
+    // сразу открыл следующий) - блокировка накрывает экран сразу,
+    // играть до восстановления нельзя.
+    if (_livesLeft <= 0) {
+      _timeUp = true;
+      _game.paused = true;
+      _lockSecondsLeft = Services.lives.secondsUntilNextLife;
+      _startLivesTicker();
+    }
   }
 
   @override
   void dispose() {
     _playClock?.cancel();
+    _livesTicker?.cancel();
     WidgetsBinding.instance.removeObserver(this);
     Services.audio.playMusic(MusicTrack.menu);
     super.dispose();
@@ -146,9 +179,50 @@ class _GameScreenState extends State<GameScreen> with WidgetsBindingObserver {
       _result = null;
       _freshAchievements = const <Achievement>[];
       _freeHintSpent = false;
+      _timeUp = false;
     });
     _game.resetLevel();
     _setPaused(false);
+  }
+
+  /// Не уложился в лимит уровня. Списывает жизнь и показывает оверлей -
+  /// с кнопкой «Заново», если жизни ещё остались, или с живым отсчётом
+  /// до следующей восстановленной, если нет.
+  Future<void> _handleTimeUp() async {
+    await Services.lives.loseLife();
+    if (!mounted) return;
+
+    _game.paused = true;
+    setState(() {
+      _timeUp = true;
+      _livesLeft = Services.lives.livesLeft;
+      _lockSecondsLeft = Services.lives.secondsUntilNextLife;
+    });
+
+    if (_livesLeft <= 0) _startLivesTicker();
+  }
+
+  /// Раз в секунду обновляет отсчёт до следующей жизни, пока их не
+  /// хватает. Останавливается сам, как только жизнь восстановилась -
+  /// дальше можно жать «Заново» обычным путём.
+  void _startLivesTicker() {
+    _livesTicker?.cancel();
+    _livesTicker = Timer.periodic(const Duration(seconds: 1), (Timer timer) {
+      if (!mounted) {
+        timer.cancel();
+        return;
+      }
+      final int lives = Services.lives.livesLeft;
+      if (lives > 0) {
+        timer.cancel();
+        setState(() {
+          _livesLeft = lives;
+          _lockSecondsLeft = 0;
+        });
+        return;
+      }
+      setState(() => _lockSecondsLeft = Services.lives.secondsUntilNextLife);
+    });
   }
 
   /// Звёзды и награду считает экран: игра ничего не знает
@@ -465,7 +539,10 @@ class _GameScreenState extends State<GameScreen> with WidgetsBindingObserver {
                       onPressed: () => _setPaused(true),
                     ),
                   ),
-                  ResponsiveCenter(maxWidth: 480, child: _Hud(game: _game)),
+                  ResponsiveCenter(
+                    maxWidth: 480,
+                    child: _Hud(game: _game, livesLeft: _livesLeft),
+                  ),
                   const SizedBox(height: 6),
                   ResponsiveCenter(
                     maxWidth: 480,
@@ -516,6 +593,13 @@ class _GameScreenState extends State<GameScreen> with WidgetsBindingObserver {
                   onRetry: _restart,
                   onHome: () => Navigator.of(context).pop(),
                   ),
+              if (_timeUp)
+                LevelTimeUpOverlay(
+                  livesLeft: _livesLeft,
+                  lockSecondsLeft: _lockSecondsLeft,
+                  onRetry: _livesLeft > 0 ? _restart : null,
+                  onHome: () => Navigator.of(context).pop(),
+                ),
               ],
             ),
           ),
@@ -589,9 +673,13 @@ class _TipCard extends StatelessWidget {
 }
 
 class _Hud extends StatelessWidget {
-  const _Hud({required this.game});
+  const _Hud({required this.game, required this.livesLeft});
 
   final AirportGame game;
+
+  /// Живая величина - экран сам держит её свежей через тикер, здесь
+  /// только отображение, без обращения к сервису напрямую.
+  final int livesLeft;
 
   @override
   Widget build(BuildContext context) {
@@ -599,13 +687,14 @@ class _Hud extends StatelessWidget {
     return ValueListenableBuilder<HudState>(
       valueListenable: game.hud,
       builder: (BuildContext context, HudState hud, _) {
+        final bool hurry = hud.secondsLeft <= 10;
         return Row(
           mainAxisAlignment: MainAxisAlignment.center,
           children: <Widget>[
             StatChip(
               icon: Icons.timer_rounded,
-              value: hud.formattedTime,
-              iconColor: p.secondary.top,
+              value: hud.formattedTimeLeft,
+              iconColor: hurry ? p.danger.top : p.secondary.top,
             ),
             const SizedBox(width: 10),
             StatChip(
@@ -619,9 +708,35 @@ class _Hud extends StatelessWidget {
               value: '${hud.routed}/${hud.total}',
               iconColor: p.success.top,
             ),
+            const SizedBox(width: 10),
+            _LivesRow(livesLeft: livesLeft),
           ],
         );
       },
+    );
+  }
+}
+
+/// Три сердца - жизни на обычных уровнях. Компактная версия, чтобы
+/// влезть в один ряд с остальными счётчиками HUD.
+class _LivesRow extends StatelessWidget {
+  const _LivesRow({required this.livesLeft});
+
+  final int livesLeft;
+
+  @override
+  Widget build(BuildContext context) {
+    final AppPalette p = context.palette;
+    return Row(
+      mainAxisSize: MainAxisSize.min,
+      children: List<Widget>.generate(3, (int i) {
+        final bool alive = i < livesLeft;
+        return Icon(
+          alive ? Icons.favorite_rounded : Icons.favorite_border_rounded,
+          size: 15,
+          color: alive ? p.danger.top : p.textMuted.withOpacity(0.5),
+        );
+      }),
     );
   }
 }

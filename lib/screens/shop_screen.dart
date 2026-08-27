@@ -1125,7 +1125,6 @@ class _ExtrasTab extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final AppPalette p = context.palette;
-    final bool processing = Services.purchases.isProcessing;
 
     return ListView(
       padding: const EdgeInsets.fromLTRB(18, 0, 18, 24),
@@ -1141,14 +1140,16 @@ class _ExtrasTab extends StatelessWidget {
         IapProductCard(
           product: IapCatalog.coinsPocket,
           owned: false,
-          processing: processing,
+          processing: Services.purchases
+              .isProcessingProduct(IapCatalog.coinsPocket.id),
           onBuy: onBuyCoinsPack,
         ),
         const SizedBox(height: 10),
         IapProductCard(
           product: IapCatalog.hintsSmall,
           owned: false,
-          processing: processing,
+          processing: Services.purchases
+              .isProcessingProduct(IapCatalog.hintsSmall.id),
           onBuy: onBuyHintsPack,
         ),
         const SizedBox(height: 10),

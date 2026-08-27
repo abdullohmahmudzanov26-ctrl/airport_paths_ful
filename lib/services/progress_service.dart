@@ -1,3 +1,5 @@
+import 'dart:math' as math;
+
 import 'package:flutter/foundation.dart';
 
 import '../data/achievements_data.dart';
@@ -34,6 +36,15 @@ class ProgressService extends ChangeNotifier {
   /// «какой день», стало «когда именно», потому что забирать теперь
   /// можно каждые пять минут, а не раз в сутки.
   int _airportIncomeClaimedAt = 0;
+
+  /// Сколько уже заработано из банка дохода СЕГОДНЯ - отдельно от
+  /// самого банка (тот копится по времени, этот - по деньгам за день).
+  int _airportEarnedToday = 0;
+
+  /// День (см. DailyKeys.todayKey), к которому относится счётчик выше.
+  /// Не совпал с сегодняшним - счётчик обнуляется при первом же чтении.
+  int _airportEarnedDay = 0;
+
   int _playSeconds = 0;
 
   // Счётчики считаются один раз и обновляются при изменениях:
@@ -93,6 +104,8 @@ class ProgressService extends ChangeNotifier {
         .clamp(0, AirportEvolution.maxLevel);
     _airportIncomeClaimedAt =
         _storage.getInt(StorageKeys.airportIncomeClaimedAt, 0);
+    _airportEarnedToday = _storage.getInt(StorageKeys.airportEarnedToday, 0);
+    _airportEarnedDay = _storage.getInt(StorageKeys.airportEarnedDay, 0);
     _playSeconds = _storage.getInt(StorageKeys.playSeconds, 0);
 
     _recountStats();
@@ -295,6 +308,7 @@ class ProgressService extends ChangeNotifier {
         if (m != null) {
           _coins += m.coins;
           await _storage.setInt(StorageKeys.coins, _coins);
+          if (m.skinId != null) await _grantSkin(m.skinId!);
         }
       }
     }
@@ -366,9 +380,39 @@ class ProgressService extends ChangeNotifier {
     return (elapsedMs ~/ tickMs).clamp(0, AirportEvolution.maxBankedTicks);
   }
 
+  /// Сегодняшний день сменился - счётчик заработка обнуляется. Дешёвая
+  /// синхронная проверка, вызывается из каждого геттера ниже, поэтому
+  /// значение всегда свежее само по себе, без отдельного тикера.
+  void _resolveAirportDailyReset() {
+    final int today = DailyKeys.todayKey();
+    if (_airportEarnedDay == today) return;
+    _airportEarnedDay = today;
+    _airportEarnedToday = 0;
+    _storage.setInt(StorageKeys.airportEarnedDay, today);
+    _storage.setInt(StorageKeys.airportEarnedToday, 0);
+  }
+
+  /// Сколько уже заработано из банка дохода сегодня.
+  int get airportEarnedToday {
+    _resolveAirportDailyReset();
+    return _airportEarnedToday;
+  }
+
+  /// Сколько ещё можно заработать сегодня до дневного потолка.
+  int get airportDailyRemaining =>
+      (AirportEvolution.dailyEarnCap - airportEarnedToday)
+          .clamp(0, AirportEvolution.dailyEarnCap);
+
+  /// Дневной потолок уже выбран целиком - копить в банке смысла нет,
+  /// новые монеты появятся только завтра.
+  bool get airportDailyLimitReached => airportDailyRemaining <= 0;
+
   /// Сумма, которая реально ждёт сбора прямо сейчас - то самое число,
-  /// что показывает кнопка. 0, пока не набежала первая пятиминутка.
-  int get airportBankedAmount => _bankedTicks * airportClaimAmount;
+  /// что показывает кнопка. Уже учитывает дневной потолок: банк может
+  /// быть набит битком, но если сегодня заработано почти 3000, кнопка
+  /// честно покажет остаток, а не то, что «на бумаге» накопил банк.
+  int get airportBankedAmount =>
+      math.min(_bankedTicks * airportClaimAmount, airportDailyRemaining);
 
   /// Банк упёрся в потолок - копить дальше некуда, самое время забрать.
   /// Экран может честно предупредить об этом, а не молчать о том,
@@ -378,17 +422,22 @@ class ProgressService extends ChangeNotifier {
       _airportLevel > 0 &&
       _bankedTicks >= AirportEvolution.maxBankedTicks;
 
-  /// Есть что забрать - и построенный аэропорт, и хотя бы один
-  /// накопленный тик.
+  /// Есть что забрать - построенный аэропорт, хотя бы один накопленный
+  /// тик и дневной потолок ещё не исчерпан.
   bool get airportIncomeReady =>
-      airportUnlocked && _airportLevel > 0 && _bankedTicks > 0;
+      airportUnlocked &&
+      _airportLevel > 0 &&
+      _bankedTicks > 0 &&
+      !airportDailyLimitReached;
 
   /// Сколько секунд осталось до ПЕРВОГО тика, если банк сейчас пуст.
   /// Пока в банке уже есть что забрать, отсчитывать нечего - экран
-  /// показывает кнопку сбора вместо таймера.
+  /// показывает кнопку сбора вместо таймера. Если дневной потолок уже
+  /// выбран - тоже 0: считать здесь нечего, экран показывает отдельное
+  /// сообщение «приходи завтра» через airportDailyLimitReached.
   int get airportIncomeSecondsLeft {
     if (!airportUnlocked || _airportLevel <= 0) return 0;
-    if (_bankedTicks > 0) return 0;
+    if (_bankedTicks > 0 || airportDailyLimitReached) return 0;
     final int tickMs = AirportEvolution.incomeIntervalSeconds * 1000;
     final int leftMs = tickMs - _msSinceClaim;
     return leftMs <= 0 ? 0 : (leftMs / 1000).ceil();
@@ -437,19 +486,41 @@ class ProgressService extends ChangeNotifier {
   /// пуст. Метка времени продвигается ровно на забранные тики, а не
   /// сбрасывается на «сейчас» - дробный прогресс к следующей
   /// пятиминутке не сгорает, а остаётся в зачёт.
+  /// Забрать всё, что накопилось в банке. Возвращает 0, если банк
+  /// пуст ИЛИ дневной потолок уже выбран. Метка времени продвигается
+  /// ровно на забранные тики, а не сбрасывается на «сейчас» - дробный
+  /// прогресс к следующей пятиминутке не сгорает, а остаётся в зачёт.
+  ///
+  /// Выплата зажата дневным потолком (AirportEvolution.dailyEarnCap):
+  /// банк списывается ЦЕЛИКОМ в любом случае - иначе излишек можно
+  /// было бы придержать до завтра и разом обойти лимит, - но монет
+  /// сверх остатка за сегодня начислено не будет.
   Future<int> claimAirportIncome() async {
     final int ticks = _bankedTicks;
     if (ticks <= 0) return 0;
 
-    final int amount = ticks * airportClaimAmount;
+    _resolveAirportDailyReset();
+    final int remaining = airportDailyRemaining;
+
     final int tickMs = AirportEvolution.incomeIntervalSeconds * 1000;
     _airportIncomeClaimedAt += ticks * tickMs;
-    _coins += amount;
     await _storage.setInt(
       StorageKeys.airportIncomeClaimedAt,
       _airportIncomeClaimedAt,
     );
+
+    if (remaining <= 0) {
+      // Банк списан, но сегодня уже выбрано всё до потолка - ни одной
+      // лишней монеты сверху, даже если банк был набит битком.
+      notifyListeners();
+      return 0;
+    }
+
+    final int amount = math.min(ticks * airportClaimAmount, remaining);
+    _coins += amount;
+    _airportEarnedToday += amount;
     await _storage.setInt(StorageKeys.coins, _coins);
+    await _storage.setInt(StorageKeys.airportEarnedToday, _airportEarnedToday);
     await _checkAchievements();
     notifyListeners();
     return amount;
@@ -658,11 +729,15 @@ class ProgressService extends ChangeNotifier {
     _hintsRefillDay = 0;
     _airportLevel = 0;
     _airportIncomeClaimedAt = 0;
+    _airportEarnedToday = 0;
+    _airportEarnedDay = 0;
     _coinsBonusDay = 0;
     _doubleRewardArmed = false;
     _playSeconds = 0;
     await _storage.setInt(StorageKeys.airportLevel, 0);
     await _storage.setInt(StorageKeys.airportIncomeClaimedAt, 0);
+    await _storage.setInt(StorageKeys.airportEarnedToday, 0);
+    await _storage.setInt(StorageKeys.airportEarnedDay, 0);
     await _storage.setInt(StorageKeys.coinsDailyBonusDay, 0);
     await _storage.setBool(StorageKeys.doubleRewardArmed, false);
     await _storage.setInt(StorageKeys.playSeconds, 0);

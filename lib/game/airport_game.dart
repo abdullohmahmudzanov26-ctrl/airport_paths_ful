@@ -1,6 +1,5 @@
 import 'dart:ui';
 
-import 'package:flame/components.dart';
 import 'package:flame/game.dart';
 import 'package:flutter/foundation.dart';
 
@@ -23,7 +22,9 @@ import 'systems/collision_system.dart';
 import 'systems/route_controller.dart';
 
 /// Фаза уровня. Пока маршруты рисуются - drawing, после старта - running.
-enum GamePhase { drawing, running, won, crashed }
+/// timeUp - не уложился в отведённое время, ровно как crashed, но
+/// причина другая: не столкновение, а исчерпанный лимит.
+enum GamePhase { drawing, running, won, crashed, timeUp }
 
 /// Снимок состояния для интерфейса. Время хранится в целых секундах,
 /// поэтому HUD перестраивается раз в секунду, а не каждый кадр.
@@ -35,6 +36,7 @@ class HudState {
     required this.seconds,
     required this.routed,
     required this.total,
+    required this.timeLimit,
   });
 
   final GamePhase phase;
@@ -43,9 +45,28 @@ class HudState {
   final int routed;
   final int total;
 
+  /// Жёсткий лимит на уровень в секундах - см. LevelTiming.forLevel.
+  final int timeLimit;
+
+  /// Сколько секунд осталось до потери жизни. Не уходит в минус -
+  /// нижний ноль сам по себе не проваливает уровень, это делает
+  /// AirportGame.update() в момент, когда время исчерпано.
+  int get secondsLeft => (timeLimit - seconds).clamp(0, timeLimit);
+
+  /// 0..1 - для полосы таймера в HUD.
+  double get timeFraction => timeLimit <= 0 ? 0 : secondsLeft / timeLimit;
+
   String get formattedTime {
     final int m = seconds ~/ 60;
     final int s = seconds % 60;
+    return '${m.toString().padLeft(2, '0')}:${s.toString().padLeft(2, '0')}';
+  }
+
+  /// То же самое, но обратный отсчёт до потери жизни - его показывает
+  /// HUD вместо элапсед-таймера, который раньше только считал вверх.
+  String get formattedTimeLeft {
+    final int m = secondsLeft ~/ 60;
+    final int s = secondsLeft % 60;
     return '${m.toString().padLeft(2, '0')}:${s.toString().padLeft(2, '0')}';
   }
 
@@ -56,10 +77,12 @@ class HudState {
       other.moves == moves &&
       other.seconds == seconds &&
       other.routed == routed &&
-      other.total == total;
+      other.total == total &&
+      other.timeLimit == timeLimit;
 
   @override
-  int get hashCode => Object.hash(phase, moves, seconds, routed, total);
+  int get hashCode =>
+      Object.hash(phase, moves, seconds, routed, total, timeLimit);
 }
 
 /// Игровое поле на Flame.
@@ -72,8 +95,10 @@ class AirportGame extends FlameGame {
     required this.level,
     required this.theme,
     required this.skin,
+    required this.timeLimitSeconds,
     this.onLevelComplete,
     this.onCrash,
+    this.onTimeUp,
   });
 
   final LevelData level;
@@ -84,6 +109,11 @@ class AirportGame extends FlameGame {
   /// Силуэт бортов - тоже из магазина.
   final PlaneSkin skin;
 
+  /// Жёсткий лимит на уровень - см. LevelTiming.forLevel. Считается
+  /// экраном один раз при создании игры, а не самой игрой: игра не
+  /// должна знать про номер уровня в кампании, только про секунды.
+  final int timeLimitSeconds;
+
   /// Способность экипированного борта - тем же приёмом, что и feature:
   /// вычисляется один раз при загрузке. У стартового скина способности
   /// нет, поэтому PlaneAbility.none ничего в полёте не меняет.
@@ -93,6 +123,9 @@ class AirportGame extends FlameGame {
   /// игра не должна знать про сохранения и монеты.
   final void Function(int moves, int seconds)? onLevelComplete;
   final VoidCallback? onCrash;
+
+  /// Не уложился в timeLimitSeconds, пока рисовал маршруты.
+  final VoidCallback? onTimeUp;
 
   static const CollisionSystem _collisions = CollisionSystem();
 
@@ -120,6 +153,7 @@ class AirportGame extends FlameGame {
       seconds: 0,
       routed: 0,
       total: 0,
+      timeLimit: 0,
     ),
   );
 
@@ -227,6 +261,19 @@ class AirportGame extends FlameGame {
         // Время идёт только пока игрок думает: анимация вылета
         // не должна портить ему звёзды за скорость.
         _elapsed += dt;
+
+        // Не успел решить в отведённое время - честный провал, а не
+        // столкновение. Проверяется только пока маршруты не готовы:
+        // если игрок уже дорисовал всё и просто ждёт launchCountdown,
+        // время вышло - не наказывать за долю секунды на грани.
+        if (!routes.allComplete && elapsedSeconds >= timeLimitSeconds) {
+          phase = GamePhase.timeUp;
+          Services.audio.play(Sfx.error);
+          Services.haptics.error();
+          onTimeUp?.call();
+          break;
+        }
+
         if (routes.allComplete) {
           _launchCountdown -= dt;
           if (_launchCountdown <= 0) _startRun();
@@ -245,6 +292,9 @@ class AirportGame extends FlameGame {
 
       case GamePhase.crashed:
         break;
+      case GamePhase.timeUp:
+        // TODO: Handle this case.
+        throw UnimplementedError();
     }
 
     events.tick(dt, drawing: phase == GamePhase.drawing);
@@ -439,6 +489,7 @@ class AirportGame extends FlameGame {
       seconds: seconds,
       routed: routed,
       total: level.planeCount,
+      timeLimit: timeLimitSeconds,
     );
   }
 }

@@ -23,12 +23,20 @@ class StorageKeys {
   static const String coinsDailyBonusDay = 'coins_daily_bonus_day';
   static const String doubleRewardArmed = 'double_reward_armed';
   static const String iapOwned = 'iap_owned';
+
+  /// Жизни на обычных уровнях: текущий запас и якорь регенерации.
+  static const String lives = 'lives';
+  static const String livesRegenAnchor = 'lives_regen_anchor';
   static const String airportLevel = 'airport_level';
 
   /// Заменил airport_income_day: теперь хранится момент сбора
   /// в миллисекундах, а не номер дня - доход забирают каждые
   /// пять минут, а не раз в сутки. Старый ключ больше не читается.
   static const String airportIncomeClaimedAt = 'airport_income_claimed_at';
+
+  /// Сколько уже заработано из банка дохода сегодня, и какой это день.
+  static const String airportEarnedToday = 'airport_earned_today';
+  static const String airportEarnedDay = 'airport_earned_day';
   static const String playSeconds = 'play_seconds';
   static const String firstRun = 'first_run';
 

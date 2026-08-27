@@ -4,6 +4,7 @@ import 'package:flutter/material.dart';
 
 import '../data/app_strings.dart';
 import '../data/board_themes.dart';
+import '../data/plane_skins.dart';
 import '../data/super_milestones.dart';
 import '../theme/app_palette.dart';
 import '../theme/app_text_styles.dart';
@@ -139,55 +140,26 @@ class _SuperMilestoneOverlayState extends State<SuperMilestoneOverlay>
                           ),
                           if (widget.grantedThemeId != null) ...<Widget>[
                             const SizedBox(height: 18),
-                            Container(
-                              padding: const EdgeInsets.symmetric(
-                                horizontal: 18,
-                                vertical: 12,
+                            _GrantBadge(
+                              icon: Icons.map_rounded,
+                              titleKey: 'zone_unlocked_title',
+                              value: tr(
+                                BoardThemes.byId(widget.grantedThemeId)
+                                    .nameKey,
                               ),
-                              decoration: BoxDecoration(
-                                color: Colors.white.withOpacity(0.08),
-                                borderRadius: BorderRadius.circular(14),
-                                border: Border.all(
-                                  color: p.primary.top.withOpacity(0.5),
-                                ),
+                              hintKey: 'zone_unlocked_hint',
+                            ),
+                          ],
+                          if (widget.milestone.skinId != null) ...<Widget>[
+                            const SizedBox(height: 18),
+                            _GrantBadge(
+                              icon: Icons.flight_rounded,
+                              titleKey: 'plane_unlocked_title',
+                              value: tr(
+                                PlaneSkins.byId(widget.milestone.skinId)
+                                    .nameKey,
                               ),
-                              child: Column(
-                                mainAxisSize: MainAxisSize.min,
-                                children: <Widget>[
-                                  Row(
-                                    mainAxisSize: MainAxisSize.min,
-                                    children: <Widget>[
-                                      Icon(Icons.map_rounded,
-                                          size: 18, color: p.primary.top),
-                                      const SizedBox(width: 8),
-                                      Text(
-                                        tr('zone_unlocked_title'),
-                                        style: AppText.caption.copyWith(
-                                          color: p.primary.top,
-                                          letterSpacing: 1.4,
-                                        ),
-                                      ),
-                                    ],
-                                  ),
-                                  const SizedBox(height: 4),
-                                  Text(
-                                    tr(BoardThemes.byId(
-                                      widget.grantedThemeId,
-                                    ).nameKey),
-                                    style: AppText.value.copyWith(
-                                      color: Colors.white,
-                                    ),
-                                  ),
-                                  const SizedBox(height: 2),
-                                  Text(
-                                    tr('zone_unlocked_hint'),
-                                    textAlign: TextAlign.center,
-                                    style: AppText.caption.copyWith(
-                                      color: Colors.white.withOpacity(0.75),
-                                    ),
-                                  ),
-                                ],
-                              ),
+                              hintKey: 'zone_unlocked_hint',
                             ),
                           ],
                           const SizedBox(height: 28),
@@ -311,4 +283,67 @@ class _ConfettiPainter extends CustomPainter {
 
   @override
   bool shouldRepaint(covariant _ConfettiPainter old) => old.t != t;
+}
+
+/// Карточка «получено вместе с вехой» - тема локации или новый борт.
+/// Оба случая используют один и тот же вид: заголовок, что именно
+/// досталось, и короткая подсказка, что это можно сменить в магазине.
+class _GrantBadge extends StatelessWidget {
+  const _GrantBadge({
+    required this.icon,
+    required this.titleKey,
+    required this.value,
+    required this.hintKey,
+  });
+
+  final IconData icon;
+  final String titleKey;
+  final String value;
+  final String hintKey;
+
+  @override
+  Widget build(BuildContext context) {
+    final AppPalette p = context.palette;
+
+    return Container(
+      padding: const EdgeInsets.symmetric(horizontal: 18, vertical: 12),
+      decoration: BoxDecoration(
+        color: Colors.white.withOpacity(0.08),
+        borderRadius: BorderRadius.circular(14),
+        border: Border.all(color: p.primary.top.withOpacity(0.5)),
+      ),
+      child: Column(
+        mainAxisSize: MainAxisSize.min,
+        children: <Widget>[
+          Row(
+            mainAxisSize: MainAxisSize.min,
+            children: <Widget>[
+              Icon(icon, size: 18, color: p.primary.top),
+              const SizedBox(width: 8),
+              Text(
+                tr(titleKey),
+                style: AppText.caption.copyWith(
+                  color: p.primary.top,
+                  letterSpacing: 1.4,
+                ),
+              ),
+            ],
+          ),
+          const SizedBox(height: 4),
+          Text(
+            value,
+            style: AppText.value.copyWith(color: Colors.white),
+          ),
+          const SizedBox(height: 2),
+          Text(
+            tr(hintKey),
+            textAlign: TextAlign.center,
+            style: AppText.caption.copyWith(
+              color: Colors.white.withOpacity(0.75),
+            ),
+          ),
+        ],
+      ),
+    );
+  }
 }

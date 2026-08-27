@@ -144,6 +144,14 @@ class PlaneAbilities {
       shieldCharges: 1,
     ),
 
+    // -------------------------------------------------- первый вызов
+    'underdog': PlaneAbility(
+      nameKey: 'ability_underdog',
+      descriptionKey: 'ability_underdog_desc',
+      glyphs: <AbilityGlyph>[AbilityGlyph.coins],
+      coinBonus: 0.05,
+    ),
+
     // -------------------------------------------------------- ЭКСКЛЮЗИВЫ
     'founder_jet': PlaneAbility(
       nameKey: 'ability_founders_grace',

@@ -31,10 +31,10 @@ class AppTheme {
               ? Typography.material2021(platform: TargetPlatform.android).white
               : Typography.material2021(platform: TargetPlatform.android).black)
           .apply(
-            bodyColor: palette.textPrimary,
-            displayColor: palette.textPrimary,
-            fontFamily: AppText.fontFamily,
-          ),
+        bodyColor: palette.textPrimary,
+        displayColor: palette.textPrimary,
+        fontFamily: AppText.fontFamily,
+      ),
       pageTransitionsTheme: const PageTransitionsTheme(
         builders: <TargetPlatform, PageTransitionsBuilder>{
           TargetPlatform.android: ZoomPageTransitionsBuilder(),
