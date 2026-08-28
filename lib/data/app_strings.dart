@@ -237,6 +237,10 @@ class AppStrings {
     'cs_see_all': 'SEE ALL OFFERS',
     'purchase_failed': 'Purchase failed - try again',
     'buy_for_hints': 'Get a small hint pack instead',
+    'restore_purchases': 'Restore Purchases',
+    'restore_success': 'Purchases restored',
+    'restore_none': 'No previous purchases found',
+    'restore_failed': 'Could not restore purchases - try again',
 
     'iap_best_value': 'BEST VALUE',
     'iap_popular': 'POPULAR',
@@ -633,6 +637,10 @@ class AppStrings {
     'cs_see_all': 'VER TODAS LAS OFERTAS',
     'purchase_failed': 'La compra fall\u00F3 - int\u00E9ntalo de nuevo',
     'buy_for_hints': 'Consigue un paquete peque\u00F1o de pistas',
+    'restore_purchases': 'Restaurar compras',
+    'restore_success': 'Compras restauradas',
+    'restore_none': 'No se encontraron compras anteriores',
+    'restore_failed': 'No se pudieron restaurar las compras - int\u00E9ntalo de nuevo',
 
     'iap_best_value': 'MEJOR PRECIO',
     'iap_popular': 'POPULAR',

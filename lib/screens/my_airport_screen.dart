@@ -1,3 +1,5 @@
+// ignore_for_file: unused_element
+
 import 'dart:async';
 import 'dart:math' as math;
 
@@ -12,7 +14,6 @@ import '../services/audio_service.dart';
 import '../services/service_locator.dart';
 import '../theme/app_palette.dart';
 import '../theme/app_text_styles.dart';
-import '../widgets/airport_3d_view.dart';
 import '../widgets/airport_backdrop.dart';
 import '../widgets/app_panel.dart';
 import '../widgets/game_button.dart';
@@ -302,10 +303,7 @@ class _UnlockedBody extends StatelessWidget {
     return ListView(
       padding: const EdgeInsets.fromLTRB(18, 4, 18, 24),
       children: <Widget>[
-        Airport3DView(
-          level: level,
-          fallback: _AirportView(level: level),
-        ),
+        _AirportView(level: level),
         const SizedBox(height: 12),
 
         // Крупно: какой сейчас уровень и как называется эпоха.
@@ -588,7 +586,6 @@ class _RecentReward extends StatelessWidget {
   }
 }
 
-// ignore: unused_element
 class _FlowStep extends StatelessWidget {
   const _FlowStep({
     required this.icon,
@@ -631,7 +628,6 @@ class _FlowStep extends StatelessWidget {
   }
 }
 
-// ignore: unused_element
 class _FlowArrow extends StatelessWidget {
   const _FlowArrow({required this.color});
 

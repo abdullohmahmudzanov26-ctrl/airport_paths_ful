@@ -716,6 +716,11 @@ class ProgressService extends ChangeNotifier {
       await _storage.remove(StorageKeys.bestTime(i));
       await _storage.remove(StorageKeys.bestMoves(i));
       await _storage.remove(StorageKeys.perfect(i));
+      // Раньше квест уровня не сбрасывался вместе со звёздами: после
+      // "Reset Progress" isQuestDone() всё ещё отвечал true для уже
+      // выполненных квестов, и game_screen._handleWin молча не выдавал
+      // за них награду повторно, хотя игрок формально начинал с нуля.
+      await _storage.remove(StorageKeys.quest(i));
     }
     _unlocked = 1;
     _coins = 0;

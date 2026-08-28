@@ -1,4 +1,3 @@
-import '../widgets/airport_3d_view.dart';
 import 'ad_service.dart';
 import 'audio_service.dart';
 import 'boss_service.dart';
@@ -48,11 +47,6 @@ class Services {
     await purchases.load();
     await lives.load();
     await audio.init();
-
-    // Прошлый запуск мог закончиться вылетом Flutter GPU. Проверяем
-    // это до того, как экран аэропорта успеет снова показать 3D.
-    await Render3D.checkPreviousRun();
-
     _initialized = true;
   }
 }

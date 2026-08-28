@@ -63,6 +63,38 @@ class _CoinsShopScreenState extends State<CoinsShopScreen> {
     if (product.coins > 0) _showFlash(product.coins);
   }
 
+  /// Обязательная кнопка для App Store (Guideline 3.1.1): владелец
+  /// нерасходуемой покупки (Remove Ads, Starter Pack) должен суметь
+  /// вернуть её без повторной оплаты - после переустановки или на
+  /// новом устройстве.
+  Future<void> _restore() async {
+    final bool ownedBefore =
+        Services.purchases.isOwned(IapCatalog.removeAds.id) ||
+            Services.purchases.isOwned(IapCatalog.starterPack.id);
+    final bool success = await Services.purchases.restorePurchases();
+    if (!mounted) return;
+    final bool ownedAfter =
+        Services.purchases.isOwned(IapCatalog.removeAds.id) ||
+            Services.purchases.isOwned(IapCatalog.starterPack.id);
+    if (!success) {
+      _toast(tr('restore_failed'));
+    } else if (ownedAfter && !ownedBefore) {
+      _toast(tr('restore_success'));
+    } else {
+      _toast(tr('restore_none'));
+    }
+  }
+
+  void _toast(String message) {
+    ScaffoldMessenger.of(context)
+      ..hideCurrentSnackBar()
+      ..showSnackBar(SnackBar(
+        duration: const Duration(milliseconds: 1600),
+        behavior: SnackBarBehavior.floating,
+        content: Text(message),
+      ));
+  }
+
   @override
   Widget build(BuildContext context) {
     final AppPalette p = context.palette;
@@ -199,6 +231,19 @@ class _CoinsShopScreenState extends State<CoinsShopScreen> {
                               processing: Services.purchases
                                   .isProcessingProduct(IapCatalog.removeAds.id),
                               onBuy: () => _buy(IapCatalog.removeAds),
+                            ),
+                          ),
+                          const SizedBox(height: 10),
+                          Center(
+                            child: TextButton(
+                              onPressed: Services.purchases.isRestoring
+                                  ? null
+                                  : _restore,
+                              child: Text(
+                                tr('restore_purchases'),
+                                style: AppText.label
+                                    .copyWith(color: p.textSecondary),
+                              ),
                             ),
                           ),
                           const SizedBox(height: 18),

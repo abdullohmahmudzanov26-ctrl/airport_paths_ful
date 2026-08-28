@@ -18,7 +18,6 @@ dependencies:
 
   # Музыка и звуковые эффекты - Этап 6
   audioplayers: ^6.1.0
-  flame_3d: ^0.3.0
 
 dev_dependencies:
   flutter_test:

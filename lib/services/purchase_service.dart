@@ -106,4 +106,50 @@ class PurchaseService extends ChangeNotifier {
     await Future<void>.delayed(const Duration(milliseconds: 900));
     return true;
   }
+
+  // ===========================================================================
+  // ВОССТАНОВЛЕНИЕ ПОКУПОК — обязательно для App Store (Guideline 3.1.1):
+  // не потерять «убрать рекламу»/стартовый набор при переустановке или
+  // смене устройства. Как и с оплатой, здесь заглушка, которая просто
+  // подтверждает уже известные владения; реальный список нерасходуемых
+  // покупок должен приходить из стора.
+  // ===========================================================================
+  //
+  // Для in_app_purchase:
+  //   1. вызвать InAppPurchase.instance.restorePurchases();
+  //   2. в подписке на purchaseStream для каждой PurchaseDetails с
+  //      PurchaseStatus.restored добавить productId в _owned и сохранить;
+  //   3. вернуть true, если restorePurchases() не выбросил ошибку - экран
+  //      должен уметь показать «ничего не найдено» отдельно от «не удалось»,
+  //      поэтому этот метод только пытается восстановить, а фактически
+  //      восстановленное видно по isOwned() после его завершения.
+  bool _restoring = false;
+
+  bool get isRestoring => _restoring;
+
+  Future<bool> restorePurchases() async {
+    if (_restoring) return false;
+    _restoring = true;
+    notifyListeners();
+
+    bool success = false;
+    try {
+      success = await _processRestore();
+    } catch (e) {
+      debugPrint('PurchaseService: восстановление не удалось ($e)');
+      success = false;
+    }
+
+    _restoring = false;
+    notifyListeners();
+    return success;
+  }
+
+  Future<bool> _processRestore() async {
+    await Future<void>.delayed(const Duration(milliseconds: 700));
+    // Заглушка ничего не знает о сторе - она честно не добавляет
+    // владений, которых уже нет в _owned. Реальная реализация должна
+    // здесь синхронизировать _owned с ответом стора.
+    return true;
+  }
 }
