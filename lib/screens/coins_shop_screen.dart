@@ -68,14 +68,12 @@ class _CoinsShopScreenState extends State<CoinsShopScreen> {
   /// вернуть её без повторной оплаты - после переустановки или на
   /// новом устройстве.
   Future<void> _restore() async {
-    final bool ownedBefore =
-        Services.purchases.isOwned(IapCatalog.removeAds.id) ||
-            Services.purchases.isOwned(IapCatalog.starterPack.id);
+    final bool ownedBefore = Services.purchases.isOwned(IapCatalog.removeAds.id) ||
+        Services.purchases.isOwned(IapCatalog.starterPack.id);
     final bool success = await Services.purchases.restorePurchases();
     if (!mounted) return;
-    final bool ownedAfter =
-        Services.purchases.isOwned(IapCatalog.removeAds.id) ||
-            Services.purchases.isOwned(IapCatalog.starterPack.id);
+    final bool ownedAfter = Services.purchases.isOwned(IapCatalog.removeAds.id) ||
+        Services.purchases.isOwned(IapCatalog.starterPack.id);
     if (!success) {
       _toast(tr('restore_failed'));
     } else if (ownedAfter && !ownedBefore) {
@@ -106,11 +104,7 @@ class _CoinsShopScreenState extends State<CoinsShopScreen> {
         child: SafeArea(
           child: AnimatedBuilder(
             animation: Listenable.merge(
-              <Listenable>[
-                Services.progress,
-                Services.purchases,
-                Services.settings
-              ],
+              <Listenable>[Services.progress, Services.purchases, Services.settings],
             ),
             builder: (BuildContext context, _) {
               return Column(
@@ -174,8 +168,7 @@ class _CoinsShopScreenState extends State<CoinsShopScreen> {
                               owned: Services.purchases
                                   .isOwned(IapCatalog.starterPack.id),
                               processing: Services.purchases
-                                  .isProcessingProduct(
-                                      IapCatalog.starterPack.id),
+                                  .isProcessingProduct(IapCatalog.starterPack.id),
                               onBuy: () => _buy(IapCatalog.starterPack),
                             ),
                           ),
@@ -188,9 +181,8 @@ class _CoinsShopScreenState extends State<CoinsShopScreen> {
                                 child: IapProductCard(
                                   product: IapCatalog.coinPacks[i],
                                   owned: false,
-                                  processing: Services.purchases
-                                      .isProcessingProduct(
-                                          IapCatalog.coinPacks[i].id),
+                                  processing: Services.purchases.isProcessingProduct(
+                                      IapCatalog.coinPacks[i].id),
                                   onBuy: () => _buy(IapCatalog.coinPacks[i]),
                                 ),
                               ),
@@ -203,9 +195,8 @@ class _CoinsShopScreenState extends State<CoinsShopScreen> {
                                 child: IapProductCard(
                                   product: IapCatalog.hintPacks[i],
                                   owned: false,
-                                  processing: Services.purchases
-                                      .isProcessingProduct(
-                                          IapCatalog.hintPacks[i].id),
+                                  processing: Services.purchases.isProcessingProduct(
+                                      IapCatalog.hintPacks[i].id),
                                   onBuy: () => _buy(IapCatalog.hintPacks[i]),
                                 ),
                               ),
@@ -216,8 +207,7 @@ class _CoinsShopScreenState extends State<CoinsShopScreen> {
                               product: IapCatalog.doubleBoost,
                               owned: false,
                               processing: Services.purchases
-                                  .isProcessingProduct(
-                                      IapCatalog.doubleBoost.id),
+                                  .isProcessingProduct(IapCatalog.doubleBoost.id),
                               onBuy: () => _buy(IapCatalog.doubleBoost),
                             ),
                           ),
@@ -249,7 +239,8 @@ class _CoinsShopScreenState extends State<CoinsShopScreen> {
                           const SizedBox(height: 18),
                           _Section(title: tr('cs_level_rewards')),
                           AppPanel(
-                            padding: const EdgeInsets.fromLTRB(16, 12, 16, 12),
+                            padding:
+                                const EdgeInsets.fromLTRB(16, 12, 16, 12),
                             child: Column(
                               children: <Widget>[
                                 for (int stars = 1; stars <= 3; stars++)
@@ -389,7 +380,6 @@ class _RewardCard extends StatelessWidget {
     required this.buttonLabel,
     required this.enabled,
     required this.onTap,
-    // ignore: unused_element_parameter
     this.rare = false,
     this.glow = false,
   });
@@ -414,8 +404,7 @@ class _RewardCard extends StatelessWidget {
               borderRadius: BorderRadius.circular(18),
               boxShadow: <BoxShadow>[
                 BoxShadow(
-                  color:
-                      (rare ? p.primary.top : p.star).withValues(alpha: 0.22),
+                  color: (rare ? p.primary.top : p.star).withOpacity(0.22),
                   blurRadius: 16,
                   spreadRadius: 1,
                 ),
@@ -433,11 +422,11 @@ class _RewardCard extends StatelessWidget {
               alignment: Alignment.center,
               decoration: BoxDecoration(
                 borderRadius: BorderRadius.circular(14),
-                color: Colors.black.withValues(alpha: 0.26),
+                color: Colors.black.withOpacity(0.26),
                 border: Border.all(
                   color: rare
-                      ? p.primary.top.withValues(alpha: 0.5)
-                      : p.panelBorder.withValues(alpha: 0.4),
+                      ? p.primary.top.withOpacity(0.5)
+                      : p.panelBorder.withOpacity(0.4),
                 ),
               ),
               child: Icon(icon, size: 26, color: iconColor),

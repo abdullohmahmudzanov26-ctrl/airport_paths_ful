@@ -22,6 +22,7 @@ import '../widgets/airport_backdrop.dart';
 import '../widgets/animated_entrance.dart';
 import '../widgets/app_panel.dart';
 import '../widgets/boss_overlays.dart' show AbilityBadge;
+import '../widgets/coach_mark.dart';
 import '../widgets/game_button.dart';
 import '../widgets/iap_product_card.dart';
 import '../widgets/responsive_center.dart';
@@ -51,6 +52,23 @@ class _ShopScreenState extends State<ShopScreen>
     vsync: this,
     duration: const Duration(seconds: 12),
   )..repeat();
+
+  /// Ряд вкладок - цель указки первого захода в магазин (см. initState).
+  final GlobalKey _tabsKey = GlobalKey();
+
+  /// Указка - часть дерева этого экрана (см. coach_mark.dart), поэтому
+  /// прячется своим же состоянием, а не удалением откуда-то извне.
+  late bool _showTour;
+
+  @override
+  void initState() {
+    super.initState();
+    // Тур по магазину указкой - один раз при первом заходе, ведущем
+    // сюда после 3-го уровня (сама указка "иди в магазин" показана
+    // ещё в главном меню, см. MainMenuScreen). Здесь просто называем
+    // вкладки, не пересказывая карточками, что в каждой из них лежит.
+    _showTour = !Services.onboarding.hasSeenShopHint;
+  }
 
   @override
   void dispose() {
@@ -122,6 +140,22 @@ class _ShopScreenState extends State<ShopScreen>
   Widget build(BuildContext context) {
     final AppPalette p = context.palette;
 
+    return Stack(
+      children: <Widget>[
+        _buildScaffold(context, p),
+        if (_showTour)
+          CoachMarkPointer(
+            targetKey: _tabsKey,
+            onTargetTap: () {
+              setState(() => _showTour = false);
+              Services.onboarding.markShopHintSeen();
+            },
+          ),
+      ],
+    );
+  }
+
+  Widget _buildScaffold(BuildContext context, AppPalette p) {
     return Scaffold(
       body: AirportBackdrop(
         sceneHeightFactor: 0,
@@ -159,6 +193,7 @@ class _ShopScreenState extends State<ShopScreen>
                   ),
                   const SizedBox(height: 12),
                   _Tabs(
+                    key: _tabsKey,
                     current: _tab,
                     onChanged: (int i) => setState(() => _tab = i),
                   ),
@@ -401,7 +436,7 @@ class _ShopScreenState extends State<ShopScreen>
 }
 
 class _Tabs extends StatelessWidget {
-  const _Tabs({required this.current, required this.onChanged});
+  const _Tabs({super.key, required this.current, required this.onChanged});
 
   final int current;
   final ValueChanged<int> onChanged;

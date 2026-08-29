@@ -1,5 +1,6 @@
 import 'package:flutter/foundation.dart';
 
+import '../app/app_config.dart';
 import '../models/iap_product.dart';
 import 'storage_service.dart';
 
@@ -44,10 +45,17 @@ class PurchaseService extends ChangeNotifier {
 
   bool isOwned(String productId) => _owned.contains(productId);
 
-  /// Можно ли купить прямо сейчас: не идёт другая оплата, и, если товар
-  /// нерасходуемый, он ещё не куплен.
+  /// Донат доступен вообще. Пока [_processPayment] - заглушка, флаг
+  /// AppConfig.iapEnabled держит всю ветку выключенной: витрина видна,
+  /// но кнопка честно говорит «скоро», а не выдаёт платный товар даром.
+  bool get isAvailable => AppConfig.iapEnabled;
+
+  /// Можно ли купить прямо сейчас: донат вообще включён, не идёт другая
+  /// оплата, и, если товар нерасходуемый, он ещё не куплен.
   bool canBuy(IapProduct product) =>
-      _processingId == null && (product.consumable || !isOwned(product.id));
+      isAvailable &&
+      _processingId == null &&
+      (product.consumable || !isOwned(product.id));
 
   /// Покупка товара. Возвращает true, только если оплата прошла
   /// успешно - награду выдаёт вызывающая сторона (ProgressService),
@@ -103,8 +111,13 @@ class PurchaseService extends ChangeNotifier {
   // после подключения SDK из шага 1 разработчику останется только
   // включить платежи в консоли своего аккаунта.
   Future<bool> _processPayment(IapProduct product) async {
-    await Future<void>.delayed(const Duration(milliseconds: 900));
-    return true;
+    // ЗАГЛУШКА. Раньше она возвращала true: игра считала оплату
+    // прошедшей и выдавала монеты, подсказки и «убрать рекламу»
+    // бесплатно - и в сборке для стора тоже. Теперь заглушка честно
+    // отказывает; настоящее подтверждение придёт из purchaseStream,
+    // когда будет подключён in_app_purchase (шаги выше).
+    await Future<void>.delayed(const Duration(milliseconds: 400));
+    return false;
   }
 
   // ===========================================================================

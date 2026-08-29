@@ -3,6 +3,7 @@ import 'audio_service.dart';
 import 'boss_service.dart';
 import 'haptic_service.dart';
 import 'lives_service.dart';
+import 'onboarding_service.dart';
 import 'progress_service.dart';
 import 'purchase_service.dart';
 import 'settings_service.dart';
@@ -31,8 +32,12 @@ class Services {
   static final BossService boss = BossService(storage);
 
   /// Жизни на обычных уровнях: не уложился во время - минус одна,
-  /// восстанавливаются по одной за 30 секунд, даже пока игра закрыта.
+  /// восстанавливаются по одной за 45 секунд, даже пока игра закрыта.
   static final LivesService lives = LivesService(storage);
+
+  /// Флаги "указка уже показана" - Next Level, магазин, свой аэропорт.
+  /// Читает то же хранилище, отдельной загрузки тоже не требует.
+  static final OnboardingService onboarding = OnboardingService(storage);
 
   static bool _initialized = false;
 

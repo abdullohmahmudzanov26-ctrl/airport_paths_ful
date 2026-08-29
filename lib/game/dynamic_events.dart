@@ -51,6 +51,18 @@ class DynamicEventController extends ChangeNotifier {
   /// чисто рекомендация для игрока, маршрутизацию не ограничивает.
   int? emergencyPlaneId;
 
+  /// Уровень начали заново - обстановка тоже начинается с чистого
+  /// листа. Без этого повторный заход шёл с уже разыгранным броском
+  /// кубика: событие в этом сеансе больше не могло случиться вообще.
+  void reset() {
+    final bool hadEvent = _active != null;
+    _active = null;
+    _rolled = false;
+    _cooldown = 1.2;
+    emergencyPlaneId = null;
+    if (hadEvent) notifyListeners();
+  }
+
   /// Вызывается каждый кадр из AirportGame.update(), только пока уровень
   /// ещё рисуется: после старта борта в воздухе менять обстановку поздно.
   void tick(double dt, {required bool drawing}) {

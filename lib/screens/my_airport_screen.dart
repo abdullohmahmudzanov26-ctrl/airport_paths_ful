@@ -16,7 +16,9 @@ import '../theme/app_palette.dart';
 import '../theme/app_text_styles.dart';
 import '../widgets/airport_backdrop.dart';
 import '../widgets/app_panel.dart';
+import '../widgets/coach_mark.dart';
 import '../widgets/game_button.dart';
+import '../widgets/icon_plate_button.dart';
 import '../widgets/responsive_center.dart';
 import '../widgets/screen_header.dart';
 
@@ -38,8 +40,20 @@ class MyAirportScreen extends StatefulWidget {
   State<MyAirportScreen> createState() => _MyAirportScreenState();
 }
 
+/// Шаг тура-указки по аэропорту - none, пока не разблокирован или уже
+/// пройден; upgrade/collect - какая из двух кнопок сейчас подсвечена.
+enum _AirportCoachStep { none, upgrade, collect }
+
 class _MyAirportScreenState extends State<MyAirportScreen> {
   Timer? _ticker;
+
+  /// Кнопки "Улучшить" и "Собрать" - цели тура-указки ниже.
+  final GlobalKey _upgradeKey = GlobalKey();
+  final GlobalKey _collectKey = GlobalKey();
+
+  /// Какой шаг тура сейчас активен - часть дерева этого экрана (см.
+  /// coach_mark.dart), переключается своим же состоянием.
+  _AirportCoachStep _coachStep = _AirportCoachStep.none;
 
   @override
   void initState() {
@@ -47,6 +61,18 @@ class _MyAirportScreenState extends State<MyAirportScreen> {
     _ticker = Timer.periodic(const Duration(seconds: 1), (_) {
       if (mounted) setState(() {});
     });
+
+    // Тур-указка по аэропорту - один раз, при первом открытии ПОСЛЕ
+    // того, как игрок реально прошёл уровень 25 и разблокировал раздел.
+    // Экран доступен и до этого (см. _LockedBody), поэтому проверяем
+    // именно airportUnlocked, а не сам факт открытия экрана. Вместо
+    // карточек - палец сначала на "Улучшить", потом на "Собрать": сама
+    // покупка не срабатывает от касания по указке, чтобы не тратить
+    // монеты игрока без явного второго нажатия по настоящей кнопке.
+    if (Services.progress.airportUnlocked &&
+        !Services.onboarding.hasSeenAirportHint) {
+      _coachStep = _AirportCoachStep.upgrade;
+    }
   }
 
   @override
@@ -153,6 +179,28 @@ class _MyAirportScreenState extends State<MyAirportScreen> {
 
   @override
   Widget build(BuildContext context) {
+    return Stack(
+      children: <Widget>[
+        _buildScaffold(context),
+        if (_coachStep == _AirportCoachStep.upgrade)
+          CoachMarkPointer(
+            targetKey: _upgradeKey,
+            onTargetTap: () =>
+                setState(() => _coachStep = _AirportCoachStep.collect),
+          ),
+        if (_coachStep == _AirportCoachStep.collect)
+          CoachMarkPointer(
+            targetKey: _collectKey,
+            onTargetTap: () {
+              setState(() => _coachStep = _AirportCoachStep.none);
+              Services.onboarding.markAirportHintSeen();
+            },
+          ),
+      ],
+    );
+  }
+
+  Widget _buildScaffold(BuildContext context) {
     return Scaffold(
       body: AirportBackdrop(
         sceneHeightFactor: 0,
@@ -177,6 +225,8 @@ class _MyAirportScreenState extends State<MyAirportScreen> {
                               onClaim: () => _claim(context),
                               incomeSecondsLeft:
                                   Services.progress.airportIncomeSecondsLeft,
+                              upgradeKey: _upgradeKey,
+                              collectKey: _collectKey,
                             )
                           : const _LockedBody(),
                     ),
@@ -277,12 +327,98 @@ String _formatCountdown(int seconds) {
   return '$m:${s.toString().padLeft(2, '0')}';
 }
 
+/// Открывает ту же карту аэропорта на весь экран, с возможностью
+/// увеличить пальцами - маленькая карточка не даёт как следует
+/// рассмотреть постройки.
+///
+/// opaque: true - предыдущий экран не должен просвечивать даже
+/// частично: с полупрозрачным барьером (как было раньше) снизу
+/// оставался виден исходный маленький макет аэропорта, и это
+/// выглядело как второй, «плоский» дубликат карты под новой.
+void _openFullscreenAirport(BuildContext context, int level) {
+  Navigator.of(context).push(
+    PageRouteBuilder<void>(
+      opaque: true,
+      transitionDuration: const Duration(milliseconds: 200),
+      pageBuilder: (BuildContext context, __, ___) =>
+          _AirportFullscreenPage(level: level),
+      transitionsBuilder:
+          (BuildContext context, Animation<double> anim, __, Widget child) =>
+              FadeTransition(opacity: anim, child: child),
+    ),
+  );
+}
+
+class _AirportFullscreenPage extends StatelessWidget {
+  const _AirportFullscreenPage({required this.level});
+
+  final int level;
+
+  @override
+  Widget build(BuildContext context) {
+    return Material(
+      color: Colors.black,
+      child: SafeArea(
+        child: LayoutBuilder(
+          builder: (BuildContext context, BoxConstraints c) {
+            // Вписываем карту в максимально возможный прямоугольник
+            // с сохранением её соотношения сторон (1.25) - используем
+            // и всю ширину, и всю высоту экрана, а не только ширину:
+            // раньше высота считалась от (ширина - 40), из-за чего
+            // карта оставалась почти того же размера, что и на
+            // карточке, и совсем не выглядела «на весь экран».
+            const double margin = 16;
+            const double aspect = 1.25;
+            double w = c.maxWidth - margin * 2;
+            double h = w / aspect;
+            if (h > c.maxHeight - margin * 2) {
+              h = c.maxHeight - margin * 2;
+              w = h * aspect;
+            }
+
+            return Stack(
+              children: <Widget>[
+                Center(
+                  child: InteractiveViewer(
+                    minScale: 1,
+                    maxScale: 5,
+                    child: SizedBox(
+                      width: w,
+                      height: h,
+                      child: _AirportView(level: level),
+                    ),
+                  ),
+                ),
+                Positioned(
+                  top: 8,
+                  right: 8,
+                  child: IconPlateButton(
+                    icon: Icons.close_rounded,
+                    size: 44,
+                    radius: 16,
+                    depth: 4,
+                    kind: GameButtonKind.secondary,
+                    tooltip: tr('close'),
+                    onPressed: () => Navigator.of(context).pop(),
+                  ),
+                ),
+              ],
+            );
+          },
+        ),
+      ),
+    );
+  }
+}
+
 /// Открытый аэропорт: строим и получаем доход.
 class _UnlockedBody extends StatelessWidget {
   const _UnlockedBody({
     required this.onUpgrade,
     required this.onClaim,
     required this.incomeSecondsLeft,
+    required this.upgradeKey,
+    required this.collectKey,
   });
 
   final VoidCallback onUpgrade;
@@ -290,6 +426,11 @@ class _UnlockedBody extends StatelessWidget {
 
   /// 0, если сбор уже доступен - иначе живой отсчёт до него.
   final int incomeSecondsLeft;
+
+  /// Ключи настоящих кнопок ниже - по ним CoachMark в _MyAirportScreenState
+  /// находит их положение на экране для тура по аэропорту.
+  final GlobalKey upgradeKey;
+  final GlobalKey collectKey;
 
   @override
   Widget build(BuildContext context) {
@@ -303,7 +444,26 @@ class _UnlockedBody extends StatelessWidget {
     return ListView(
       padding: const EdgeInsets.fromLTRB(18, 4, 18, 24),
       children: <Widget>[
-        _AirportView(level: level),
+        Stack(
+          children: <Widget>[
+            _AirportView(level: level),
+            // Открывает ту же карту на весь экран с масштабированием -
+            // на маленькой карточке постройки трудно рассмотреть.
+            Positioned(
+              top: 10,
+              right: 10,
+              child: IconPlateButton(
+                icon: Icons.fullscreen_rounded,
+                size: 40,
+                radius: 14,
+                depth: 4,
+                kind: GameButtonKind.secondary,
+                tooltip: tr('expand_map'),
+                onPressed: () => _openFullscreenAirport(context, level),
+              ),
+            ),
+          ],
+        ),
         const SizedBox(height: 12),
 
         // Крупно: какой сейчас уровень и как называется эпоха.
@@ -401,6 +561,7 @@ class _UnlockedBody extends StatelessWidget {
             if (!maxed)
               Expanded(
                 child: GameButton(
+                  key: upgradeKey,
                   label: tr('upgrade'),
                   icon: Icons.construction_rounded,
                   kind: canPay ? GameButtonKind.primary : GameButtonKind.locked,
@@ -412,6 +573,7 @@ class _UnlockedBody extends StatelessWidget {
             if (!maxed) const SizedBox(width: 10),
             Expanded(
               child: GameButton(
+                key: collectKey,
                 label: incomeReady
                     ? '${tr('collect')}  ${Services.progress.airportBankedAmount}'
                     : (Services.progress.airportDailyLimitReached
@@ -722,6 +884,8 @@ class _AirportPainter extends CustomPainter {
   @override
   void paint(Canvas canvas, Size size) {
     final Rect all = Offset.zero & size;
+    final bool isNight =
+        theme.style == BoardStyle.night || theme.style == BoardStyle.orbital;
 
     // Небо над полем - глубина сцены.
     canvas.drawRect(
@@ -737,10 +901,39 @@ class _AirportPainter extends CustomPainter {
         ).createShader(all),
     );
 
+    // Мягкое световое пятно в верхней части неба - без него градиент
+    // выглядит плоской заливкой, а не сценой с источником света.
+    canvas.drawRect(
+      all,
+      Paint()
+        ..shader = RadialGradient(
+          center: const Alignment(-0.35, -0.85),
+          radius: 0.9,
+          colors: <Color>[
+            (isNight ? theme.beacon : theme.glass).withValues(alpha: 0.16),
+            Colors.transparent,
+          ],
+        ).createShader(all),
+    );
+
+    // Звёзды - только у ночных/орбитальных тем, фиксированный сид,
+    // чтобы не мерцали при каждой перерисовке во время анимации стройки.
+    if (isNight) {
+      final math.Random starRnd = math.Random(2024);
+      final Paint star = Paint()..color = Colors.white.withValues(alpha: 0.7);
+      for (int i = 0; i < 26; i++) {
+        final Offset p = Offset(
+          starRnd.nextDouble() * size.width,
+          starRnd.nextDouble() * size.height * 0.5,
+        );
+        canvas.drawCircle(p, starRnd.nextDouble() * 1.1 + 0.3, star);
+      }
+    }
+
     final double tile = size.width / (_grid + 1.2);
     final Offset origin = Offset(size.width / 2, size.height * 0.26);
 
-    _paintGround(canvas, tile, origin);
+    _paintGround(canvas, tile, origin, isNight);
 
     // Объекты рисуются в порядке удаления от камеры, иначе дальние
     // постройки перекрывают ближние.
@@ -753,6 +946,22 @@ class _AirportPainter extends CustomPainter {
     for (final _Placed p in placed) {
       _paintPart(canvas, tile, origin, p.b, p.grow);
     }
+
+    // Лёгкое виньетирование по краям - взгляд собирается к центру сцены,
+    // как в отрисовке основного игрового поля.
+    canvas.drawRect(
+      all,
+      Paint()
+        ..shader = RadialGradient(
+          center: Alignment.center,
+          radius: 0.95,
+          colors: <Color>[
+            Colors.transparent,
+            Colors.black.withValues(alpha: 0.22)
+          ],
+          stops: const <double>[0.72, 1.0],
+        ).createShader(all),
+    );
   }
 
   Offset _iso(double gx, double gy, double h, double tile, Offset o) => Offset(
@@ -760,12 +969,19 @@ class _AirportPainter extends CustomPainter {
         o.dy + (gx + gy) * tile * 0.25 - h * tile * 0.5,
       );
 
-  void _paintGround(Canvas canvas, double tile, Offset o) {
+  void _paintGround(Canvas canvas, double tile, Offset o, bool isNight) {
     final Paint grass = Paint()..color = theme.grass;
+    final Paint grassAlt = Paint()
+      ..color = _mix(theme.grass, theme.grassDot, 0.45);
+    final Paint dot = Paint()..color = theme.grassDot.withValues(alpha: 0.55);
     final Paint edge = Paint()
       ..style = PaintingStyle.stroke
       ..strokeWidth = 1
       ..color = theme.groundPatch;
+
+    // Фиксированный сид - текстура травы не "мерцает" на каждый кадр
+    // анимации стройки, узор один и тот же между перерисовками.
+    final math.Random rnd = math.Random(1337);
 
     for (int x = 0; x < _grid; x++) {
       for (int y = 0; y < _grid; y++) {
@@ -779,17 +995,58 @@ class _AirportPainter extends CustomPainter {
           ..lineTo(_iso(x + 0.0, y + 1.0, 0, tile, o).dx,
               _iso(x + 0.0, y + 1.0, 0, tile, o).dy)
           ..close();
-        canvas.drawPath(d, grass);
+        // Лёгкое чередование двух оттенков травы вместо плоской заливки -
+        // тот же приём шахматки, что читается на основном игровом поле.
+        canvas.drawPath(d, (x + y).isEven ? grass : grassAlt);
         canvas.drawPath(d, edge);
+        if (rnd.nextDouble() < 0.4) {
+          final Offset center = _iso(
+            x + 0.3 + rnd.nextDouble() * 0.4,
+            y + 0.3 + rnd.nextDouble() * 0.4,
+            0,
+            tile,
+            o,
+          );
+          canvas.drawCircle(center, tile * 0.035, dot);
+        }
       }
     }
 
     // Главная ВПП есть с самого начала - иначе это не аэропорт.
+    // Контактная тень под полосой отрывает её от травы точно так же,
+    // как тень под каждой постройкой ниже в _box.
+    final Path stripShadow = Path()
+      ..moveTo(_iso(0, 8, 0, tile, o).dx, _iso(0, 8, 0, tile, o).dy)
+      ..lineTo(_iso(9, 8, 0, tile, o).dx, _iso(9, 8, 0, tile, o).dy)
+      ..lineTo(_iso(9, 9, 0, tile, o).dx + tile * 0.1,
+          _iso(9, 9, 0, tile, o).dy + tile * 0.1)
+      ..lineTo(_iso(0, 9, 0, tile, o).dx + tile * 0.1,
+          _iso(0, 9, 0, tile, o).dy + tile * 0.1)
+      ..close();
+    canvas.drawPath(
+      stripShadow,
+      Paint()
+        ..color = Colors.black.withValues(alpha: 0.16)
+        ..maskFilter = const MaskFilter.blur(BlurStyle.normal, 4),
+    );
+
     _paintStrip(canvas, tile, o, 0, 8, 9, 1, theme.asphalt);
+    // Светлая осевая полоса поверх покрытия - без неё широкая ВПП
+    // читается тем же плоским цветом, что и обычные рулёжки.
+    final Paint axis = Paint()
+      ..color = theme.asphaltLight.withValues(alpha: 0.5)
+      ..strokeWidth = math.max(0.8, tile * 0.025);
+    canvas.drawLine(
+      _iso(0.1, 8.5, 0.01, tile, o),
+      _iso(8.9, 8.5, 0.01, tile, o),
+      axis,
+    );
     final Paint mark = Paint()
       ..color = theme.marking
       ..strokeWidth = math.max(1.2, tile * 0.06)
-      ..strokeCap = StrokeCap.round;
+      ..strokeCap = StrokeCap.round
+      ..maskFilter =
+          isNight ? const MaskFilter.blur(BlurStyle.normal, 1.4) : null;
     for (int i = 0; i < 8; i++) {
       final Offset a = _iso(i + 0.35, 8.5, 0, tile, o);
       final Offset b = _iso(i + 0.75, 8.5, 0, tile, o);
@@ -810,45 +1067,84 @@ class _AirportPainter extends CustomPainter {
   }
 
   /// Коробка в изометрии: верхняя грань плюс две боковые.
+  ///
+  /// Добавлены три вещи, которых не было в первой версии отрисовки:
+  /// мягкая контактная тень на земле (иначе объём выглядит приклеенным
+  /// к подложке), лёгкий градиент на верхней и правой грани (свет
+  /// сверху-слева) и тонкий контур по силуэту, чтобы постройка не
+  /// сливалась с фоном на светлых темах.
   void _box(Canvas canvas, double tile, Offset o, double gx, double gy,
       double w, double d, double h, Color top, Color left, Color right) {
+    if (h <= 0.002) return;
+
+    final Offset shadowCenter = _iso(gx + w / 2, gy + d / 2, 0, tile, o);
+    canvas.drawOval(
+      Rect.fromCenter(
+        center: shadowCenter + Offset(0, tile * d * 0.10),
+        width: tile * w * 1.18,
+        height: tile * d * 0.62,
+      ),
+      Paint()
+        ..color = Colors.black.withValues(alpha: 0.24)
+        ..maskFilter = const MaskFilter.blur(BlurStyle.normal, 3),
+    );
+
     final Offset a = _iso(gx, gy, h, tile, o);
     final Offset b = _iso(gx + w, gy, h, tile, o);
     final Offset c = _iso(gx + w, gy + d, h, tile, o);
     final Offset e = _iso(gx, gy + d, h, tile, o);
 
+    final Path topPath = Path()
+      ..moveTo(a.dx, a.dy)
+      ..lineTo(b.dx, b.dy)
+      ..lineTo(c.dx, c.dy)
+      ..lineTo(e.dx, e.dy)
+      ..close();
     canvas.drawPath(
-      Path()
-        ..moveTo(a.dx, a.dy)
-        ..lineTo(b.dx, b.dy)
-        ..lineTo(c.dx, c.dy)
-        ..lineTo(e.dx, e.dy)
-        ..close(),
-      Paint()..color = top,
+      topPath,
+      Paint()
+        ..shader = LinearGradient(
+          begin: Alignment.topLeft,
+          end: Alignment.bottomRight,
+          colors: <Color>[_lighten(top, 0.28), top],
+        ).createShader(topPath.getBounds()),
     );
 
     final Offset e0 = _iso(gx, gy + d, 0, tile, o);
     final Offset c0 = _iso(gx + w, gy + d, 0, tile, o);
     final Offset b0 = _iso(gx + w, gy, 0, tile, o);
 
+    final Path leftPath = Path()
+      ..moveTo(e.dx, e.dy)
+      ..lineTo(c.dx, c.dy)
+      ..lineTo(c0.dx, c0.dy)
+      ..lineTo(e0.dx, e0.dy)
+      ..close();
+    canvas.drawPath(leftPath, Paint()..color = left);
+
+    final Path rightPath = Path()
+      ..moveTo(c.dx, c.dy)
+      ..lineTo(b.dx, b.dy)
+      ..lineTo(b0.dx, b0.dy)
+      ..lineTo(c0.dx, c0.dy)
+      ..close();
     canvas.drawPath(
-      Path()
-        ..moveTo(e.dx, e.dy)
-        ..lineTo(c.dx, c.dy)
-        ..lineTo(c0.dx, c0.dy)
-        ..lineTo(e0.dx, e0.dy)
-        ..close(),
-      Paint()..color = left,
+      rightPath,
+      Paint()
+        ..shader = LinearGradient(
+          begin: Alignment.topCenter,
+          end: Alignment.bottomCenter,
+          colors: <Color>[right, _darken(right, 0.22)],
+        ).createShader(rightPath.getBounds()),
     );
-    canvas.drawPath(
-      Path()
-        ..moveTo(c.dx, c.dy)
-        ..lineTo(b.dx, b.dy)
-        ..lineTo(b0.dx, b0.dy)
-        ..lineTo(c0.dx, c0.dy)
-        ..close(),
-      Paint()..color = right,
-    );
+
+    final Paint outline = Paint()
+      ..style = PaintingStyle.stroke
+      ..strokeWidth = math.max(0.6, tile * 0.012)
+      ..color = _darken(left, 0.4).withValues(alpha: 0.5);
+    canvas.drawPath(topPath, outline);
+    canvas.drawPath(leftPath, outline);
+    canvas.drawPath(rightPath, outline);
   }
 
   void _paintPart(
@@ -909,22 +1205,36 @@ class _AirportPainter extends CustomPainter {
             left, right);
         _box(canvas, tile, o, gx + 0.2, gy + 0.2, 0.6, 0.6, 1.75 * grow,
             theme.glass, left, right);
+        final Offset beaconCenter =
+            _iso(gx + 0.5, gy + 0.5, 1.95 * grow, tile, o);
+        // Ореол под маячком - без него это просто плоская точка, а не
+        // огонёк, который светит в темноте над башней.
         canvas.drawCircle(
-          _iso(gx + 0.5, gy + 0.5, 1.95 * grow, tile, o),
+          beaconCenter,
+          tile * 0.16,
+          Paint()
+            ..color = theme.beacon.withValues(alpha: 0.35)
+            ..maskFilter = const MaskFilter.blur(BlurStyle.normal, 5),
+        );
+        canvas.drawCircle(
+          beaconCenter,
           tile * 0.07,
           Paint()..color = theme.beacon,
         );
         break;
 
       case AirportPart.lights:
-        // Огни вдоль главной полосы.
-        final Paint glow = Paint()..color = theme.beacon.withValues(alpha: 0.9);
+        // Огни вдоль главной полосы - с мягким свечением, а не просто
+        // залитой точкой, иначе на тёмных темах они теряются на фоне ВПП.
+        final Paint haze = Paint()
+          ..color = theme.beacon.withValues(alpha: 0.45)
+          ..maskFilter = const MaskFilter.blur(BlurStyle.normal, 4);
+        final Paint glow = Paint()
+          ..color = theme.beacon.withValues(alpha: 0.95);
         for (int i = 0; i < 9; i++) {
-          canvas.drawCircle(
-            _iso(i + 0.5, 7.85, 0.1, tile, o),
-            tile * 0.06 * grow,
-            glow,
-          );
+          final Offset p = _iso(i + 0.5, 7.85, 0.1, tile, o);
+          canvas.drawCircle(p, tile * 0.14 * grow, haze);
+          canvas.drawCircle(p, tile * 0.06 * grow, glow);
         }
         break;
     }
@@ -936,6 +1246,12 @@ class _AirportPainter extends CustomPainter {
         (a.green + (b.green - a.green) * t).round(),
         (a.blue + (b.blue - a.blue) * t).round(),
       );
+
+  static Color _lighten(Color c, double t) =>
+      _mix(c, const Color(0xFFFFFFFF), t);
+
+  static Color _darken(Color c, double t) =>
+      _mix(c, const Color(0xFF000000), t);
 
   @override
   bool shouldRepaint(covariant _AirportPainter old) =>

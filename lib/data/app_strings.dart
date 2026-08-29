@@ -80,6 +80,14 @@ class AppStrings {
     'tip_stars': 'Fewer moves and less time = more stars',
     'tip_coins': 'Stars earn coins - spend them on planes and themes',
     'tip_airport': 'Coins also build your own airport - see MY AIRPORT',
+    'coach_next_level': 'Tap here to continue',
+    'coach_shop': 'Tap Shop to see what you can buy',
+    'coach_shop_tour': 'Planes, themes, exclusives and extras - all here',
+    'coach_my_airport': 'Tap here to build your own airport',
+    'coach_airport_upgrade': 'Tap Upgrade to build the next stage',
+    'coach_airport_collect': 'Tap here to collect your income',
+    'expand_map': 'Expand map',
+    'close': 'Close',
     'blocked': 'No way through here',
     'new_best': 'NEW RECORD!',
     'reset_progress': 'RESET PROGRESS',
@@ -241,6 +249,35 @@ class AppStrings {
     'restore_success': 'Purchases restored',
     'restore_none': 'No previous purchases found',
     'restore_failed': 'Could not restore purchases - try again',
+
+    'onb_skip': 'SKIP',
+    'onb_next': 'NEXT',
+    'onb_start': "LET'S PLAY",
+    'onb_got_it': 'GOT IT',
+    'onb_intro_1_title': 'Draw the Route',
+    'onb_intro_1_body':
+        'Drag from each plane to its matching parking spot to draw a safe path.',
+    'onb_intro_2_title': "Don't Cross Paths",
+    'onb_intro_2_body':
+        "Routes can't share a tile or cross each other - plan ahead before you commit.",
+    'onb_intro_3_title': 'Earn Stars & Coins',
+    'onb_intro_3_body':
+        'Finish quickly and without mistakes to earn up to 3 stars and bonus coins.',
+    'onb_intro_4_title': 'Visit the Shop',
+    'onb_intro_4_body':
+        "Spend coins on plane skins and airport themes, or grab a hint pack when you're stuck.",
+    'onb_intro_5_title': "You're Ready!",
+    'onb_intro_5_body':
+        'Settings, achievements, and your own airport are all one tap away from the menu.',
+    'onb_airport_1_title': 'Welcome to My Airport',
+    'onb_airport_1_body':
+        'You unlocked your own airport! Build it up using the coins you earn from levels.',
+    'onb_airport_2_title': 'Collect Income',
+    'onb_airport_2_body':
+        'Your airport earns coins automatically every few minutes - tap Collect to bank them.',
+    'onb_airport_3_title': 'Unlock Exclusives',
+    'onb_airport_3_body':
+        'Reach new construction milestones to earn exclusive planes and themes found nowhere else.',
 
     'iap_best_value': 'BEST VALUE',
     'iap_popular': 'POPULAR',
@@ -480,6 +517,15 @@ class AppStrings {
     'tip_stars': 'Menos movimientos y menos tiempo = m\u00E1s estrellas',
     'tip_coins': 'Las estrellas dan monedas: gasta en aviones y temas',
     'tip_airport': 'Las monedas construyen tu aeropuerto: mira MI AEROPUERTO',
+    'coach_next_level': 'Toca aqu\u00ED para continuar',
+    'coach_shop': 'Toca Tienda para ver qu\u00E9 puedes comprar',
+    'coach_shop_tour':
+        'Aviones, temas, exclusivos y extras: todo est\u00E1 aqu\u00ED',
+    'coach_my_airport': 'Toca aqu\u00ED para construir tu propio aeropuerto',
+    'coach_airport_upgrade': 'Toca Mejorar para construir la siguiente etapa',
+    'coach_airport_collect': 'Toca aqu\u00ED para cobrar tus ingresos',
+    'expand_map': 'Ampliar mapa',
+    'close': 'Cerrar',
     'blocked': 'Por aqu\u00ED no se pasa',
     'new_best': '\u00A1NUEVO R\u00C9CORD!',
     'reset_progress': 'BORRAR PROGRESO',
@@ -641,6 +687,35 @@ class AppStrings {
     'restore_success': 'Compras restauradas',
     'restore_none': 'No se encontraron compras anteriores',
     'restore_failed': 'No se pudieron restaurar las compras - int\u00E9ntalo de nuevo',
+
+    'onb_skip': 'OMITIR',
+    'onb_next': 'SIGUIENTE',
+    'onb_start': 'A JUGAR',
+    'onb_got_it': 'ENTENDIDO',
+    'onb_intro_1_title': 'Traza la ruta',
+    'onb_intro_1_body':
+        'Arrastra desde cada avi\u00F3n hasta su plaza asignada para trazar una ruta segura.',
+    'onb_intro_2_title': 'No cruces las rutas',
+    'onb_intro_2_body':
+        'Las rutas no pueden compartir casilla ni cruzarse - piensa antes de trazar.',
+    'onb_intro_3_title': 'Gana estrellas y monedas',
+    'onb_intro_3_body':
+        'Termina r\u00E1pido y sin errores para ganar hasta 3 estrellas y monedas extra.',
+    'onb_intro_4_title': 'Visita la tienda',
+    'onb_intro_4_body':
+        'Gasta monedas en aviones y temas de aeropuerto, o consigue un paquete de pistas si te atascas.',
+    'onb_intro_5_title': '\u00A1Listo!',
+    'onb_intro_5_body':
+        'Ajustes, logros y tu propio aeropuerto est\u00E1n a un toque desde el men\u00FA.',
+    'onb_airport_1_title': 'Bienvenido a Mi Aeropuerto',
+    'onb_airport_1_body':
+        '\u00A1Desbloqueaste tu propio aeropuerto! Constr\u00FAyelo con las monedas que ganas en los niveles.',
+    'onb_airport_2_title': 'Cobra los ingresos',
+    'onb_airport_2_body':
+        'Tu aeropuerto gana monedas autom\u00E1ticamente cada pocos minutos - toca Cobrar para guardarlas.',
+    'onb_airport_3_title': 'Desbloquea exclusivos',
+    'onb_airport_3_body':
+        'Alcanza nuevas etapas de construcci\u00F3n para ganar aviones y temas exclusivos que no encontrar\u00E1s en otro sitio.',
 
     'iap_best_value': 'MEJOR PRECIO',
     'iap_popular': 'POPULAR',

@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 
+import '../app/app_config.dart';
 import '../data/app_strings.dart';
 import '../models/iap_product.dart';
 import '../theme/app_palette.dart';
@@ -50,6 +51,16 @@ class IapProductCard extends StatelessWidget {
 
   final VoidCallback onBuy;
 
+  /// Подпись кнопки: галочка у уже купленного, короткий прочерк, пока
+  /// донат выключен (текст "COMING SOON" в 92 точки не помещается,
+  /// поэтому смысл несут иконка замка и неактивный вид), и цена -
+  /// только когда покупка действительно работает.
+  String _buttonLabel() {
+    if (owned) return tr('owned');
+    if (!AppConfig.iapEnabled) return '';
+    return product.priceLabel;
+  }
+
   @override
   Widget build(BuildContext context) {
     final AppPalette p = context.palette;
@@ -62,7 +73,7 @@ class IapProductCard extends StatelessWidget {
               boxShadow: <BoxShadow>[
                 BoxShadow(
                   color: (product.bestValue ? p.star : p.primary.top)
-                      .withOpacity(0.22),
+                      .withValues(alpha: 0.22),
                   blurRadius: 16,
                   spreadRadius: 1,
                 ),
@@ -75,14 +86,18 @@ class IapProductCard extends StatelessWidget {
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.start,
           children: <Widget>[
-            if (product.popular || product.bestValue || product.badgeKey != null)
+            if (product.popular ||
+                product.bestValue ||
+                product.badgeKey != null)
               Padding(
                 padding: const EdgeInsets.only(bottom: 8),
                 child: Wrap(
                   spacing: 6,
                   children: <Widget>[
-                    if (product.bestValue) _Badge(text: tr('iap_best_value'), color: p.star),
-                    if (product.popular) _Badge(text: tr('iap_popular'), color: p.primary.top),
+                    if (product.bestValue)
+                      _Badge(text: tr('iap_best_value'), color: p.star),
+                    if (product.popular)
+                      _Badge(text: tr('iap_popular'), color: p.primary.top),
                     if (product.badgeKey != null)
                       _Badge(text: tr(product.badgeKey!), color: p.success.top),
                   ],
@@ -96,12 +111,12 @@ class IapProductCard extends StatelessWidget {
                   alignment: Alignment.center,
                   decoration: BoxDecoration(
                     borderRadius: BorderRadius.circular(14),
-                    color: Colors.black.withOpacity(0.26),
+                    color: Colors.black.withValues(alpha: 0.26),
                     border: Border.all(
                       color: special
                           ? (product.bestValue ? p.star : p.primary.top)
-                              .withOpacity(0.5)
-                          : p.panelBorder.withOpacity(0.4),
+                              .withValues(alpha: 0.5)
+                          : p.panelBorder.withValues(alpha: 0.4),
                     ),
                   ),
                   child: Icon(
@@ -131,15 +146,25 @@ class IapProductCard extends StatelessWidget {
                 SizedBox(
                   width: 92,
                   child: GameButton(
-                    label: owned ? tr('owned') : product.priceLabel,
-                    icon: owned ? Icons.check_rounded : null,
-                    kind: owned
+                    // Пока донат не подключён (AppConfig.iapEnabled),
+                    // карточка не показывает цену: кнопка с суммой,
+                    // которая ничего не покупает, - это и обман игрока,
+                    // и прямой повод для отказа на ревью App Store.
+                    label: _buttonLabel(),
+                    icon: owned
+                        ? Icons.check_rounded
+                        : (AppConfig.iapEnabled ? null : Icons.lock_rounded),
+                    kind: (owned || !AppConfig.iapEnabled)
                         ? GameButtonKind.neutral
-                        : (special ? GameButtonKind.success : GameButtonKind.primary),
+                        : (special
+                            ? GameButtonKind.success
+                            : GameButtonKind.primary),
                     height: 44,
                     depth: 4,
                     textStyle: AppText.buttonSmall,
-                    onPressed: (owned || processing) ? null : onBuy,
+                    onPressed: (owned || processing || !AppConfig.iapEnabled)
+                        ? null
+                        : onBuy,
                   ),
                 ),
               ],
@@ -162,9 +187,9 @@ class _Badge extends StatelessWidget {
     return Container(
       padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 3),
       decoration: BoxDecoration(
-        color: color.withOpacity(0.16),
+        color: color.withValues(alpha: 0.16),
         borderRadius: BorderRadius.circular(8),
-        border: Border.all(color: color.withOpacity(0.5)),
+        border: Border.all(color: color.withValues(alpha: 0.5)),
       ),
       child: Text(
         text,

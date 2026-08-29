@@ -40,6 +40,20 @@ class StorageKeys {
   static const String playSeconds = 'play_seconds';
   static const String firstRun = 'first_run';
 
+  /// Указки-обучение "пальцем в кнопку" - каждая ровно один показ за
+  /// всю жизнь сохранения. playHint - самая первая, "нажми Play" при
+  /// первом запуске; shopHint - подсказка на кнопку Next Level на
+  /// уровнях 1-3, shopMenuHint/airportMenuHint - указки на кнопки
+  /// в главном меню, airportHint - тур по "Моему аэропорту".
+  static const String onboardingPlayHintSeen = 'onboarding_play_hint_seen';
+  static const String onboardingShopHintSeen = 'onboarding_shop_hint_seen';
+  static const String onboardingShopMenuHintSeen =
+      'onboarding_shop_menu_hint_seen';
+  static const String onboardingAirportMenuHintSeen =
+      'onboarding_airport_menu_hint_seen';
+  static const String onboardingAirportHintSeen =
+      'onboarding_airport_hint_seen';
+
   // Босс-лабиринт: попытки, блокировка, прохождение и рекорд.
   // Ключи привязаны к номеру уровня-босса (10, 20, 30...).
   static String bossAttempts(int levelId) => 'boss_attempts_$levelId';

@@ -1,5 +1,6 @@
 import 'package:flutter/foundation.dart';
 
+import '../app/app_config.dart';
 import '../data/daily_keys.dart';
 import 'storage_service.dart';
 
@@ -44,7 +45,12 @@ class AdService extends ChangeNotifier {
 
   int get leftToday => maxPerDay - watchedToday;
 
-  bool get canWatch => leftToday > 0 && !_showing;
+  /// Реклама вообще подключена. Пока [_present] - заглушка, флаг
+  /// AppConfig.adsEnabled держит ветку выключенной: игра не показывает
+  /// кнопку «посмотреть ролик», которая не покажет никакого ролика.
+  bool get isAvailable => AppConfig.adsEnabled;
+
+  bool get canWatch => isAvailable && leftToday > 0 && !_showing;
 
   /// Идёт показ — экран должен заблокировать кнопки.
   bool get isShowing => _showing;
@@ -56,7 +62,7 @@ class AdService extends ChangeNotifier {
 
   int get bonusLeftToday => maxBonusPerDay - bonusWatchedToday;
 
-  bool get canWatchBonus => bonusLeftToday > 0 && !_showing;
+  bool get canWatchBonus => isAvailable && bonusLeftToday > 0 && !_showing;
 
   void _rolloverIfNeeded() {
     final int today = DailyKeys.todayKey();
@@ -124,7 +130,10 @@ class AdService extends ChangeNotifier {
   // Возврат false обязателен, если ролик не загрузился: игра тогда
   // не спишет показ из дневного лимита и предложит попробовать позже.
   Future<bool> _present() async {
-    await Future<void>.delayed(const Duration(milliseconds: 800));
-    return true;
+    // ЗАГЛУШКА. Раньше возвращала true - игра начисляла награду за
+    // ролик, которого не было. Теперь честно отказывает, а showRewarded
+    // из-за canWatch сюда и не доходит, пока adsEnabled == false.
+    await Future<void>.delayed(const Duration(milliseconds: 300));
+    return false;
   }
 }

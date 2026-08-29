@@ -2,13 +2,14 @@ import 'dart:math' as math;
 
 import 'package:flutter/foundation.dart';
 
+import '../app/app_config.dart';
 import '../data/achievements_data.dart';
 import '../data/airport_evolution.dart';
 import '../data/board_themes.dart';
-import '../data/super_milestones.dart';
 import '../data/daily_keys.dart';
-import '../data/plane_skins.dart';
 import '../data/level_repository.dart';
+import '../data/plane_skins.dart';
+import '../data/super_milestones.dart';
 import '../models/achievement.dart';
 import '../models/iap_product.dart';
 import 'storage_service.dart';
@@ -95,8 +96,7 @@ class ProgressService extends ChangeNotifier {
 
     _hintsRefillDay = _storage.getInt(StorageKeys.hintsRefillDay, 0);
     _coinsBonusDay = _storage.getInt(StorageKeys.coinsDailyBonusDay, 0);
-    _doubleRewardArmed =
-        _storage.getBool(StorageKeys.doubleRewardArmed, false);
+    _doubleRewardArmed = _storage.getBool(StorageKeys.doubleRewardArmed, false);
     await refreshDailyHints();
 
     _airportLevel = _storage
@@ -134,7 +134,17 @@ class ProgressService extends ChangeNotifier {
     _perfectRuns = flawless;
   }
 
-  bool isUnlocked(int levelId) => levelId <= _unlocked;
+  /// Уровень открыт по прогрессу.
+  ///
+  /// Здесь стояла отладочная заглушка `return true` - в релизе она
+  /// открывала игроку сразу все 200 уровней: кампания, награды за
+  /// прохождение и обучение по одной механике за уровень теряли
+  /// смысл с первого запуска. Теперь тест-режим включается флагом
+  /// AppConfig.unlockAllLevels, который в релизе false.
+  bool isUnlocked(int levelId) {
+    if (AppConfig.unlockAllLevels) return true;
+    return levelId <= _unlocked;
+  }
 
   int starsOf(int levelId) => _storage.getInt(StorageKeys.stars(levelId), 0);
 
@@ -268,11 +278,20 @@ class ProgressService extends ChangeNotifier {
     }
 
     // Идеальное прохождение без подсказки: и достижение, и лишняя подсказка.
+    // Достижение (_hintFreePerfects) считается всегда - это лишь счётчик
+    // для наград/статистики, не валюта. А саму подсказку эта бесплатная
+    // награда за прохождение начисляет только до потолка hintsFreeCap:
+    // раньше проходя уровни можно было накопить подсказок сколько угодно.
+    // Купленные подсказки (магазин за монеты, донат) этот потолок не
+    // видят вообще - buyHints/grantIapReward прибавляют мимо него, как и
+    // раньше, поэтому переплата за подсказки всегда даёт честный результат.
     if (stars >= 3 && !usedHint && prevStars < 3) {
       _hintFreePerfects++;
       await _storage.setInt(StorageKeys.hintFreePerfects, _hintFreePerfects);
-      _hints++;
-      await _storage.setInt(StorageKeys.hints, _hints);
+      if (_hints < hintsFreeCap) {
+        _hints++;
+        await _storage.setInt(StorageKeys.hints, _hints);
+      }
     }
 
     _recountStats();
@@ -374,8 +393,9 @@ class ProgressService extends ChangeNotifier {
   /// (AirportEvolution.maxBankedTicks) счётчик просто перестаёт расти.
   int get _bankedTicks {
     if (_airportIncomeClaimedAt <= 0) return 0;
-    final int tickMs = AirportEvolution.incomeIntervalSeconds * 1000;
-    final int elapsedMs = DateTime.now().millisecondsSinceEpoch - _airportIncomeClaimedAt;
+    const int tickMs = AirportEvolution.incomeIntervalSeconds * 1000;
+    final int elapsedMs =
+        DateTime.now().millisecondsSinceEpoch - _airportIncomeClaimedAt;
     if (elapsedMs < tickMs) return 0;
     return (elapsedMs ~/ tickMs).clamp(0, AirportEvolution.maxBankedTicks);
   }
@@ -438,7 +458,7 @@ class ProgressService extends ChangeNotifier {
   int get airportIncomeSecondsLeft {
     if (!airportUnlocked || _airportLevel <= 0) return 0;
     if (_bankedTicks > 0 || airportDailyLimitReached) return 0;
-    final int tickMs = AirportEvolution.incomeIntervalSeconds * 1000;
+    const int tickMs = AirportEvolution.incomeIntervalSeconds * 1000;
     final int leftMs = tickMs - _msSinceClaim;
     return leftMs <= 0 ? 0 : (leftMs / 1000).ceil();
   }
@@ -502,7 +522,7 @@ class ProgressService extends ChangeNotifier {
     _resolveAirportDailyReset();
     final int remaining = airportDailyRemaining;
 
-    final int tickMs = AirportEvolution.incomeIntervalSeconds * 1000;
+    const int tickMs = AirportEvolution.incomeIntervalSeconds * 1000;
     _airportIncomeClaimedAt += ticks * tickMs;
     await _storage.setInt(
       StorageKeys.airportIncomeClaimedAt,
@@ -663,6 +683,12 @@ class ProgressService extends ChangeNotifier {
   // ------------------------------------------------------------- подсказки
 
   static const int freeHintsPerDay = 3;
+
+  /// Потолок для БЕСПЛАТНОЙ подсказки за идеальное прохождение уровня
+  /// (см. completeLevel). Купленные подсказки (магазин, донат, ролик)
+  /// этот потолок не ограничивает - запас честно может быть больше 10,
+  /// если игрок за них заплатил.
+  static const int hintsFreeCap = 10;
 
   /// Раз в сутки запас подсказок пополняется до трёх.
   ///

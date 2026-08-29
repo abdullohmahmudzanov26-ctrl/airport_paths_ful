@@ -3,7 +3,7 @@ import 'package:flutter/foundation.dart';
 import 'storage_service.dart';
 
 /// Жизни на обычных уровнях: не успел уложиться в отведённое время -
-/// теряешь одну. С нуля жизни копятся заново по одной за 30 секунд -
+/// теряешь одну. С нуля жизни копятся заново по одной за 45 секунд -
 /// по-настоящему в фоне, тем же приёмом, что и банк дохода в «Моём
 /// аэропорте»: считается от разницы реальных часов, а не от того,
 /// открыто ли приложение.
@@ -19,7 +19,7 @@ class LivesService extends ChangeNotifier {
   final StorageService _storage;
 
   static const int maxLives = 3;
-  static const int regenSeconds = 30;
+  static const int regenSeconds = 45;
 
   int _lives = maxLives;
 

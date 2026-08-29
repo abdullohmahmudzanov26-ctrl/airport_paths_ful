@@ -12,6 +12,7 @@ import '../theme/app_palette.dart';
 import '../theme/app_text_styles.dart';
 import '../widgets/airport_backdrop.dart';
 import '../widgets/animated_entrance.dart';
+import '../widgets/coach_mark.dart';
 import '../widgets/game_button.dart';
 import '../widgets/game_logo.dart';
 import '../widgets/icon_plate_button.dart';
@@ -21,10 +22,65 @@ import '../widgets/stat_chip.dart';
 ///
 /// Настройки и «об игре» ушли в нижний ряд, чтобы освободить место
 /// магазину и своему аэропорту - именно они возвращают игрока завтра.
-class MainMenuScreen extends StatelessWidget {
+class MainMenuScreen extends StatefulWidget {
   const MainMenuScreen({super.key});
 
+  @override
+  State<MainMenuScreen> createState() => _MainMenuScreenState();
+}
+
+/// Одна активная указка в главном меню: какую кнопку подсветить и что
+/// сделать по нажатию (отметить флаг и выполнить настоящую навигацию).
+class _MenuCoach {
+  const _MenuCoach(this.targetKey, this.onTap);
+  final GlobalKey targetKey;
+  final VoidCallback onTap;
+}
+
+class _MainMenuScreenState extends State<MainMenuScreen> {
   static const double _buttonMaxWidth = 300;
+
+  /// Цели указок в этом меню - передаются в кнопки ниже через их key,
+  /// чтобы CoachMarkPointer мог найти настоящую кнопку на экране и
+  /// подсветить именно её, а не рисовать отдельную картинку поверх.
+  final GlobalKey _playKey = GlobalKey();
+  final GlobalKey _shopKey = GlobalKey();
+  final GlobalKey _airportKey = GlobalKey();
+
+  /// Какая указка сейчас активна - максимум одна одновременно. См.
+  /// coach_mark.dart: это часть дерева именно этого экрана, поэтому
+  /// прячется своим же состоянием (setState), а не откуда-то извне.
+  _MenuCoach? _activeCoach;
+
+  @override
+  void initState() {
+    super.initState();
+    // Указки-обучение вместо карточек - каждая ровно один раз за игру:
+    // сперва "нажми Play" при самом первом запуске (ещё не пройден ни
+    // один уровень), потом ведём в магазин (как только пройден 3-й
+    // уровень), потом - в свой аэропорт (как только он разблокирован
+    // на 25-м). Проверяются по очереди - на экране единовременно
+    // нужна только одна указка.
+    if (!Services.onboarding.hasSeenPlayHint &&
+        Services.progress.currentLevel <= 1) {
+      _activeCoach = _MenuCoach(_playKey, () {
+        Services.onboarding.markPlayHintSeen();
+        _openCurrentLevel(context);
+      });
+    } else if (Services.progress.currentLevel > 3 &&
+        !Services.onboarding.hasSeenShopMenuHint) {
+      _activeCoach = _MenuCoach(_shopKey, () {
+        Services.onboarding.markShopMenuHintSeen();
+        Navigator.of(context).pushNamed(Routes.shop);
+      });
+    } else if (Services.progress.airportUnlocked &&
+        !Services.onboarding.hasSeenAirportMenuHint) {
+      _activeCoach = _MenuCoach(_airportKey, () {
+        Services.onboarding.markAirportMenuHintSeen();
+        Navigator.of(context).pushNamed(Routes.myAirport);
+      });
+    }
+  }
 
   void _openCurrentLevel(BuildContext context) {
     final int level = Services.progress.currentLevel;
@@ -39,6 +95,23 @@ class MainMenuScreen extends StatelessWidget {
   Widget build(BuildContext context) {
     final AppPalette p = context.palette;
 
+    return Stack(
+      children: <Widget>[
+        _buildScaffold(context, p),
+        if (_activeCoach != null)
+          CoachMarkPointer(
+            targetKey: _activeCoach!.targetKey,
+            onTargetTap: () {
+              final VoidCallback tap = _activeCoach!.onTap;
+              setState(() => _activeCoach = null);
+              tap();
+            },
+          ),
+      ],
+    );
+  }
+
+  Widget _buildScaffold(BuildContext context, AppPalette p) {
     return Scaffold(
       body: AirportBackdrop(
         child: SafeArea(
@@ -84,6 +157,9 @@ class MainMenuScreen extends StatelessWidget {
                       _MenuButtons(
                         width: width,
                         onPlay: () => _openCurrentLevel(context),
+                        playKey: _playKey,
+                        shopKey: _shopKey,
+                        airportKey: _airportKey,
                       ),
                       SizedBox(height: compact ? 14 : 24),
                       const _MenuFooter(),
@@ -161,10 +237,19 @@ class _MenuButtons extends StatelessWidget {
   const _MenuButtons({
     required this.width,
     required this.onPlay,
+    required this.playKey,
+    required this.shopKey,
+    required this.airportKey,
   });
 
   final double width;
   final VoidCallback onPlay;
+
+  /// Ключи настоящих кнопок - по ним CoachMark в родительском State
+  /// находит их положение на экране и рисует указку прямо на них.
+  final GlobalKey playKey;
+  final GlobalKey shopKey;
+  final GlobalKey airportKey;
 
   @override
   Widget build(BuildContext context) {
@@ -177,6 +262,7 @@ class _MenuButtons extends StatelessWidget {
           alignment: Alignment.center,
           children: <Widget>[
             GameButton(
+              key: playKey,
               label: tr('play'),
               icon: Icons.flight_takeoff_rounded,
               kind: GameButtonKind.primary,
@@ -207,12 +293,14 @@ class _MenuButtons extends StatelessWidget {
         onPressed: () => Navigator.of(context).pushNamed(Routes.levels),
       ),
       GameButton(
+        key: shopKey,
         label: tr('shop'),
         icon: Icons.storefront_rounded,
         width: width,
         onPressed: () => Navigator.of(context).pushNamed(Routes.shop),
       ),
       GameButton(
+        key: airportKey,
         label: tr('my_airport'),
         icon: Services.progress.airportUnlocked
             ? Icons.location_city_rounded

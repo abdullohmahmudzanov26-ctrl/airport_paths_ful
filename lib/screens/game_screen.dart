@@ -1,15 +1,17 @@
-import 'package:flame/game.dart';
 import 'dart:async';
 
+import 'package:airport_paths/data/level_timing.dart';
+import 'package:flame/game.dart';
 import 'package:flutter/material.dart';
 
+import '../app/app_config.dart';
 import '../app/routes.dart';
 import '../data/app_strings.dart';
 import '../data/board_themes.dart';
 import '../data/iap_catalog.dart';
-import '../data/level_timing.dart';
-import '../data/plane_skins.dart';
 import '../data/level_repository.dart';
+import '../data/plane_skins.dart';
+import '../data/super_milestones.dart';
 import '../game/airport_game.dart';
 import '../game/systems/scoring_system.dart';
 import '../models/achievement.dart';
@@ -21,19 +23,18 @@ import '../services/audio_service.dart';
 import '../services/service_locator.dart';
 import '../theme/app_palette.dart';
 import '../theme/app_text_styles.dart';
-import '../widgets/game_backdrop.dart';
 import '../widgets/app_panel.dart';
+import '../widgets/game_backdrop.dart';
 import '../widgets/game_button.dart';
 import '../widgets/icon_plate_button.dart';
-import '../data/super_milestones.dart';
 import '../widgets/level_intel_panel.dart';
-import '../widgets/pause_overlay.dart';
-import '../widgets/super_milestone_overlay.dart';
 import '../widgets/level_time_up_overlay.dart';
+import '../widgets/pause_overlay.dart';
 import '../widgets/responsive_center.dart';
-import '../widgets/win_overlay.dart';
 import '../widgets/screen_header.dart';
 import '../widgets/stat_chip.dart';
+import '../widgets/super_milestone_overlay.dart';
+import '../widgets/win_overlay.dart';
 
 /// Игровой экран. Шапка, HUD и кнопки - Flutter, поле - Flame.
 /// Жесты снимает Flutter и передаёт в игру уже в координатах поля:
@@ -90,7 +91,10 @@ class _GameScreenState extends State<GameScreen> with WidgetsBindingObserver {
     super.initState();
     WidgetsBinding.instance.addObserver(this);
     _playClock = Timer.periodic(const Duration(seconds: 1), (_) {
-      if (!mounted || _paused || _result != null) return;
+      // Оверлей провала по времени - это тоже не игра: раньше секунды
+      // капали в награду за время, пока игрок смотрел на «жизни
+      // кончились» и ждал восстановления.
+      if (!mounted || _paused || _result != null || _timeUp) return;
       Services.progress.addPlaySeconds(1);
     });
     // Сутки могли смениться, пока игра висела в фоне.
@@ -107,7 +111,9 @@ class _GameScreenState extends State<GameScreen> with WidgetsBindingObserver {
       // которые можно надеть или снять по желанию.
       theme: BoardThemes.byId(Services.progress.equippedTheme),
       skin: PlaneSkins.byId(Services.progress.equippedSkin),
-      timeLimitSeconds: LevelTiming.forLevel(widget.levelId),
+      // Лимит считается от самой карты, а не от номера уровня: см.
+      // LevelTiming - на поздних уровнях объём работы решает всё.
+      timeLimitSeconds: LevelTiming.forLevel(_level),
       onLevelComplete: _handleWin,
       onCrash: _handleCrash,
       onTimeUp: _handleTimeUp,
@@ -232,6 +238,7 @@ class _GameScreenState extends State<GameScreen> with WidgetsBindingObserver {
       level: _level,
       moves: moves,
       seconds: seconds,
+      timeLimitSeconds: _game.timeLimitSeconds,
     );
     // Флаги копились в AirportGame по ходу забега - здесь только
     // читаем итог, ничего заново не проверяем.
@@ -245,7 +252,11 @@ class _GameScreenState extends State<GameScreen> with WidgetsBindingObserver {
     String? zoneThemeGranted;
 
     final int computedCoins = _game.ability.applyCoinBonus(
-      ScoringSystem.coins(stars: stars, levelId: _level.id),
+      ScoringSystem.coins(
+        stars: stars,
+        levelId: _level.id,
+        perfect: perfect,
+      ),
     );
     final int previousBest = Services.progress.bestTime(_level.id);
     isNewBest = previousBest == 0 || seconds < previousBest;
@@ -271,8 +282,7 @@ class _GameScreenState extends State<GameScreen> with WidgetsBindingObserver {
 
     // Задание проверяется один раз, в момент победы - не каждый
     // кадр. completeQuest сам идемпотентен, повторно не заплатит.
-    if (!Services.progress.isQuestDone(_level.id) &&
-        _game.quest.check(_game)) {
+    if (!Services.progress.isQuestDone(_level.id) && _game.quest.check(_game)) {
       await Services.progress.completeQuest(_level.id, _game.quest.reward);
       questJustCompleted = true;
     }
@@ -289,7 +299,9 @@ class _GameScreenState extends State<GameScreen> with WidgetsBindingObserver {
     }
     final List<Achievement> inlineAchievements = milestone == null
         ? fresh
-        : fresh.where((Achievement a) => a.id != milestone!.achievementId).toList();
+        : fresh
+            .where((Achievement a) => a.id != milestone!.achievementId)
+            .toList();
 
     if (!mounted) return;
     setState(() {
@@ -317,7 +329,7 @@ class _GameScreenState extends State<GameScreen> with WidgetsBindingObserver {
       await showDialog<void>(
         context: context,
         barrierDismissible: false,
-        barrierColor: Colors.black.withOpacity(0.85),
+        barrierColor: Colors.black.withValues(alpha: 0.85),
         builder: (BuildContext context) => SuperMilestoneOverlay(
           milestone: milestone!,
           grantedThemeId: zoneThemeGranted,
@@ -354,6 +366,10 @@ class _GameScreenState extends State<GameScreen> with WidgetsBindingObserver {
   }
 
   Future<void> _useHint() async {
+    // Уровень уже решён, взлетел или провален - тратить подсказку
+    // не на что. Без этой проверки запас списывался, а applyHint()
+    // (он тоже проверяет фазу) ничего не делал: подсказка сгорала зря.
+    if (_game.phase != GamePhase.drawing) return;
     if (_game.routes.allComplete) return;
     if (_game.feature.noHints) {
       _toast(tr('feat_nohint_toast'), Icons.block_rounded);
@@ -373,26 +389,30 @@ class _GameScreenState extends State<GameScreen> with WidgetsBindingObserver {
 
     final bool paid = await Services.progress.spendHint();
     if (!paid) {
-      // Подсказки кончились - предлагаем ролик, а не тупик.
-      await _offerAdForHints();
+      // Запас пуст - предлагаем пополнить, а не упираемся в тупик.
+      await _offerMoreHints();
       return;
     }
     _game.applyHint();
     setState(() {});
   }
 
-  /// Подсказок нет: показываем предложение посмотреть ролик - или,
-  /// если реклама уже куплена и снята (IapCatalog.removeAds), сразу
-  /// маленький донат-набор подсказок вместо ролика.
-  Future<void> _offerAdForHints() async {
+  /// Подсказки кончились. Раньше здесь был единственный выход - ролик,
+  /// а если реклама не подключена или лимит выбран, диалог превращался
+  /// в тупик с одной кнопкой «отмена». Теперь предложение всегда
+  /// заканчивается чем-то работающим: набор подсказок за внутриигровые
+  /// монеты не зависит ни от рекламной сети, ни от стора, а монеты
+  /// в игре честно зарабатываются звёздами, заданиями и аэропортом.
+  Future<void> _offerMoreHints() async {
     final AppPalette p = context.palette;
-    final bool adsRemoved =
-        Services.purchases.isOwned(IapCatalog.removeAds.id);
+    final bool adsRemoved = Services.purchases.isOwned(IapCatalog.removeAds.id);
     final bool canWatch = !adsRemoved && Services.ads.canWatch;
+    final bool canBuyPack = Services.purchases.canBuy(IapCatalog.hintsSmall);
+    final bool enoughCoins = Services.progress.coins >= AppConfig.hintPackPrice;
 
-    final bool? watch = await showDialog<bool>(
+    final String? action = await showDialog<String>(
       context: context,
-      barrierColor: Colors.black.withOpacity(0.66),
+      barrierColor: Colors.black.withValues(alpha: 0.66),
       builder: (BuildContext context) => Dialog(
         backgroundColor: Colors.transparent,
         elevation: 0,
@@ -409,36 +429,51 @@ class _GameScreenState extends State<GameScreen> with WidgetsBindingObserver {
               ),
               const SizedBox(height: 8),
               Text(
-                adsRemoved
-                    ? tr('buy_for_hints')
-                    : (canWatch ? tr('watch_for_hints') : tr('no_ads_left')),
+                canWatch ? tr('watch_for_hints') : tr('buy_for_hints'),
                 textAlign: TextAlign.center,
                 style: AppText.body.copyWith(color: p.textSecondary),
               ),
               const SizedBox(height: 18),
-              if (adsRemoved)
+              if (canWatch) ...<Widget>[
+                GameButton(
+                  label: '${tr('watch')}  +${AdService.hintsPerAd}',
+                  icon: Icons.play_circle_fill_rounded,
+                  kind: GameButtonKind.success,
+                  width: 230,
+                  onPressed: () => Navigator.of(context).pop('ad'),
+                ),
+                const SizedBox(height: 10),
+              ],
+              // Основной путь: монеты. Кнопка видна всегда - даже когда
+              // монет не хватает, потому что тогда она честно говорит
+              // об этом, а не исчезает, оставляя игрока без объяснения.
+              GameButton(
+                label:
+                    '${AppConfig.hintPackSize} ${tr('hint')}  ${AppConfig.hintPackPrice}',
+                icon: Icons.monetization_on_rounded,
+                kind: enoughCoins
+                    ? GameButtonKind.primary
+                    : GameButtonKind.locked,
+                width: 230,
+                onPressed: () => Navigator.of(context).pop('coins'),
+              ),
+              const SizedBox(height: 10),
+              if (canBuyPack) ...<Widget>[
                 GameButton(
                   label:
                       '${IapCatalog.hintsSmall.priceLabel}  +${IapCatalog.hintsSmall.hints}',
                   icon: Icons.card_giftcard_rounded,
                   kind: GameButtonKind.success,
                   width: 230,
-                  onPressed: () => Navigator.of(context).pop(true),
-                )
-              else if (canWatch)
-                GameButton(
-                  label: '${tr('watch')}  +${AdService.hintsPerAd}',
-                  icon: Icons.play_circle_fill_rounded,
-                  kind: GameButtonKind.success,
-                  width: 230,
-                  onPressed: () => Navigator.of(context).pop(true),
+                  onPressed: () => Navigator.of(context).pop('iap'),
                 ),
-              if (adsRemoved || canWatch) const SizedBox(height: 10),
+                const SizedBox(height: 10),
+              ],
               GameButton(
                 label: tr('cancel'),
                 kind: GameButtonKind.neutral,
                 width: 230,
-                onPressed: () => Navigator.of(context).pop(false),
+                onPressed: () => Navigator.of(context).pop(),
               ),
             ],
           ),
@@ -446,31 +481,48 @@ class _GameScreenState extends State<GameScreen> with WidgetsBindingObserver {
       ),
     );
 
-    if (watch != true || !mounted) return;
+    if (action == null || !mounted) return;
 
-    if (adsRemoved) {
-      final bool bought = await Services.purchases.buy(IapCatalog.hintsSmall);
-      if (!mounted) return;
-      if (bought) {
-        await Services.progress.grantIapReward(IapCatalog.hintsSmall);
-        Services.audio.play(Sfx.star);
-        _toast(tr('reward_received'), Icons.lightbulb_rounded);
-      } else {
-        _toast(tr('purchase_failed'), Icons.info_rounded);
-      }
-      return;
-    }
+    switch (action) {
+      case 'coins':
+        final bool bought = await Services.progress.buyHints(
+          count: AppConfig.hintPackSize,
+          price: AppConfig.hintPackPrice,
+        );
+        if (!mounted) return;
+        if (bought) {
+          Services.audio.play(Sfx.star);
+          _toast(tr('reward_received'), Icons.lightbulb_rounded);
+        } else {
+          _toast(tr('not_enough'), Icons.info_rounded);
+        }
+        return;
 
-    final bool rewarded = await Services.ads.showRewarded();
-    if (!mounted) return;
-    if (rewarded) {
-      await Services.progress.rewardHints(AdService.hintsPerAd);
-      if (mounted) {
-        Services.audio.play(Sfx.star);
-        _toast(tr('reward_received'), Icons.lightbulb_rounded);
-      }
-    } else {
-      _toast(tr('ad_failed'), Icons.info_rounded);
+      case 'iap':
+        final bool paid = await Services.purchases.buy(IapCatalog.hintsSmall);
+        if (!mounted) return;
+        if (paid) {
+          await Services.progress.grantIapReward(IapCatalog.hintsSmall);
+          if (!mounted) return;
+          Services.audio.play(Sfx.star);
+          _toast(tr('reward_received'), Icons.lightbulb_rounded);
+        } else {
+          _toast(tr('purchase_failed'), Icons.info_rounded);
+        }
+        return;
+
+      case 'ad':
+        final bool rewarded = await Services.ads.showRewarded();
+        if (!mounted) return;
+        if (rewarded) {
+          await Services.progress.rewardHints(AdService.hintsPerAd);
+          if (!mounted) return;
+          Services.audio.play(Sfx.star);
+          _toast(tr('reward_received'), Icons.lightbulb_rounded);
+        } else {
+          _toast(tr('ad_failed'), Icons.info_rounded);
+        }
+        return;
     }
   }
 
@@ -485,7 +537,7 @@ class _GameScreenState extends State<GameScreen> with WidgetsBindingObserver {
           behavior: SnackBarBehavior.floating,
           shape: RoundedRectangleBorder(
             borderRadius: BorderRadius.circular(14),
-            side: BorderSide(color: p.panelBorder.withOpacity(0.6)),
+            side: BorderSide(color: p.panelBorder.withValues(alpha: 0.6)),
           ),
           content: Row(
             children: <Widget>[
@@ -525,81 +577,81 @@ class _GameScreenState extends State<GameScreen> with WidgetsBindingObserver {
       },
       child: Scaffold(
         body: GameBackdrop(
-        theme: _game.theme,
-        child: SafeArea(
-          child: Stack(
-            children: <Widget>[
-              Column(
-                children: <Widget>[
-                  ScreenHeader(
-                    title: '${tr('level')} ${widget.levelId}',
-                    action: IconPlateButton(
-                      icon: Icons.pause_rounded,
-                      tooltip: tr('pause'),
-                      onPressed: () => _setPaused(true),
-                    ),
-                  ),
-                  ResponsiveCenter(
-                    maxWidth: 480,
-                    child: _Hud(game: _game, livesLeft: _livesLeft),
-                  ),
-                  const SizedBox(height: 6),
-                  ResponsiveCenter(
-                    maxWidth: 480,
-                    child: LevelIntelPanel(game: _game),
-                  ),
-                  const SizedBox(height: 8),
-                  Expanded(
-                    child: Padding(
-                      padding: const EdgeInsets.symmetric(horizontal: 8),
-                      child: GestureDetector(
-                        behavior: HitTestBehavior.opaque,
-                        onPanDown: (DragDownDetails d) =>
-                            _game.pointerDown(d.localPosition),
-                        onPanUpdate: (DragUpdateDetails d) =>
-                            _game.pointerMove(d.localPosition),
-                        onPanEnd: (DragEndDetails d) => _game.pointerUp(),
-                        onPanCancel: _game.pointerUp,
-                        child: GameWidget<AirportGame>(game: _game),
+          theme: _game.theme,
+          child: SafeArea(
+            child: Stack(
+              children: <Widget>[
+                Column(
+                  children: <Widget>[
+                    ScreenHeader(
+                      title: '${tr('level')} ${widget.levelId}',
+                      action: IconPlateButton(
+                        icon: Icons.pause_rounded,
+                        tooltip: tr('pause'),
+                        onPressed: () => _setPaused(true),
                       ),
                     ),
-                  ),
-                  _TipCard(game: _game, text: _tip),
-                  const SizedBox(height: 8),
-                  ResponsiveCenter(
-                    maxWidth: 480,
-                    child: _Controls(
-                      game: _game,
-                      onUndo: _game.undo,
-                      onHint: _useHint,
+                    ResponsiveCenter(
+                      maxWidth: 480,
+                      child: _Hud(game: _game, livesLeft: _livesLeft),
                     ),
-                  ),
-                  const SizedBox(height: 16),
-                ],
-              ),
-              if (_paused && _result == null)
-                PauseOverlay(
-                  onResume: () => _setPaused(false),
-                  onRestart: _restart,
-                  onSettings: () =>
-                      Navigator.of(context).pushNamed(Routes.settings),
-                  onHome: () => Navigator.of(context).pop(),
+                    const SizedBox(height: 6),
+                    ResponsiveCenter(
+                      maxWidth: 480,
+                      child: LevelIntelPanel(game: _game),
+                    ),
+                    const SizedBox(height: 8),
+                    Expanded(
+                      child: Padding(
+                        padding: const EdgeInsets.symmetric(horizontal: 8),
+                        child: GestureDetector(
+                          behavior: HitTestBehavior.opaque,
+                          onPanDown: (DragDownDetails d) =>
+                              _game.pointerDown(d.localPosition),
+                          onPanUpdate: (DragUpdateDetails d) =>
+                              _game.pointerMove(d.localPosition),
+                          onPanEnd: (DragEndDetails d) => _game.pointerUp(),
+                          onPanCancel: _game.pointerUp,
+                          child: GameWidget<AirportGame>(game: _game),
+                        ),
+                      ),
+                    ),
+                    _TipCard(game: _game, text: _tip),
+                    const SizedBox(height: 8),
+                    ResponsiveCenter(
+                      maxWidth: 480,
+                      child: _Controls(
+                        game: _game,
+                        onUndo: _game.undo,
+                        onHint: _useHint,
+                      ),
+                    ),
+                    const SizedBox(height: 16),
+                  ],
                 ),
-              if (_result != null)
-                WinOverlay(
-                  result: _result!,
-                  freshAchievements: _freshAchievements,
-                  onNext: _openNextLevel,
-                  onRetry: _restart,
-                  onHome: () => Navigator.of(context).pop(),
+                if (_paused && _result == null)
+                  PauseOverlay(
+                    onResume: () => _setPaused(false),
+                    onRestart: _restart,
+                    onSettings: () =>
+                        Navigator.of(context).pushNamed(Routes.settings),
+                    onHome: () => Navigator.of(context).pop(),
                   ),
-              if (_timeUp)
-                LevelTimeUpOverlay(
-                  livesLeft: _livesLeft,
-                  lockSecondsLeft: _lockSecondsLeft,
-                  onRetry: _livesLeft > 0 ? _restart : null,
-                  onHome: () => Navigator.of(context).pop(),
-                ),
+                if (_result != null)
+                  WinOverlay(
+                    result: _result!,
+                    freshAchievements: _freshAchievements,
+                    onNext: _openNextLevel,
+                    onRetry: _restart,
+                    onHome: () => Navigator.of(context).pop(),
+                  ),
+                if (_timeUp)
+                  LevelTimeUpOverlay(
+                    livesLeft: _livesLeft,
+                    lockSecondsLeft: _lockSecondsLeft,
+                    onRetry: _livesLeft > 0 ? _restart : null,
+                    onHome: () => Navigator.of(context).pop(),
+                  ),
               ],
             ),
           ),
@@ -637,13 +689,13 @@ class _TipCard extends StatelessWidget {
                 ? Padding(
                     padding: const EdgeInsets.fromLTRB(20, 8, 20, 0),
                     child: Container(
-                      padding:
-                          const EdgeInsets.symmetric(horizontal: 14, vertical: 10),
+                      padding: const EdgeInsets.symmetric(
+                          horizontal: 14, vertical: 10),
                       decoration: BoxDecoration(
-                        color: Colors.black.withOpacity(0.32),
+                        color: Colors.black.withValues(alpha: 0.32),
                         borderRadius: BorderRadius.circular(14),
                         border: Border.all(
-                          color: p.secondary.top.withOpacity(0.45),
+                          color: p.secondary.top.withValues(alpha: 0.45),
                         ),
                       ),
                       child: Row(
@@ -734,7 +786,7 @@ class _LivesRow extends StatelessWidget {
         return Icon(
           alive ? Icons.favorite_rounded : Icons.favorite_border_rounded,
           size: 15,
-          color: alive ? p.danger.top : p.textMuted.withOpacity(0.5),
+          color: alive ? p.danger.top : p.textMuted.withValues(alpha: 0.5),
         );
       }),
     );

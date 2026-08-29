@@ -10,6 +10,7 @@ import '../theme/app_palette.dart';
 import '../theme/app_text_styles.dart';
 import 'animated_entrance.dart';
 import 'app_panel.dart';
+import 'coach_mark.dart';
 import 'game_button.dart';
 import 'icon_plate_button.dart';
 import 'ribbon_banner.dart';
@@ -43,11 +44,25 @@ class _WinOverlayState extends State<WinOverlay>
     duration: const Duration(milliseconds: 1100),
   );
 
+  /// Кнопка "Next Level"/"Home" ниже - цель указки для уровней 1-3.
+  final GlobalKey _actionKey = GlobalKey();
+
+  /// Указка - часть дерева ЭТОГО виджета (см. коментарий в
+  /// coach_mark.dart), поэтому прячется через своё же состояние, а не
+  /// через удаление откуда-то извне.
+  late bool _showCoach;
+
   @override
   void initState() {
     super.initState();
     _stars.forward();
     _chimeStars();
+
+    // Указка на Next Level - показывается на первых уровнях, пока
+    // игрок не увидел тур по магазину (после 3-го уровня). Не
+    // отдельная карточка - палец прямо на настоящей кнопке ниже.
+    _showCoach =
+        widget.result.levelId <= 3 && !Services.onboarding.hasSeenShopHint;
   }
 
   /// Звук на каждую заработанную звезду, в такт с её появлением.
@@ -78,7 +93,25 @@ class _WinOverlayState extends State<WinOverlay>
     const double width = 268;
 
     return Positioned.fill(
-      child: Container(
+      child: Stack(
+        children: <Widget>[
+          _buildDialog(context, p, r, hasNext, width),
+          if (_showCoach)
+            CoachMarkPointer(
+              targetKey: _actionKey,
+              onTargetTap: () {
+                setState(() => _showCoach = false);
+                (hasNext ? widget.onNext : widget.onHome)();
+              },
+            ),
+        ],
+      ),
+    );
+  }
+
+  Widget _buildDialog(BuildContext context, AppPalette p, LevelResult r,
+      bool hasNext, double width) {
+    return Container(
         color: Colors.black.withOpacity(0.66),
         alignment: Alignment.center,
         child: SingleChildScrollView(
@@ -162,6 +195,7 @@ class _WinOverlayState extends State<WinOverlay>
                       ],
                       const SizedBox(height: 20),
                       GameButton(
+                        key: _actionKey,
                         label: hasNext ? tr('next_level') : tr('home'),
                         kind: GameButtonKind.success,
                         width: width,
@@ -196,8 +230,7 @@ class _WinOverlayState extends State<WinOverlay>
             ),
           ),
         ),
-      ),
-    );
+      );
   }
 }
 

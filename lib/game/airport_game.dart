@@ -140,6 +140,7 @@ class AirportGame extends FlameGame {
   bool get showTutorial =>
       level.id == tutorialLevel &&
       phase == GamePhase.drawing &&
+      level.planes.isNotEmpty &&
       routes.routeOf(level.planes.first.id).length < 2;
 
   late final RouteController routes = RouteController(level);
@@ -290,11 +291,13 @@ class AirportGame extends FlameGame {
         _updateCelebration(dt);
         break;
 
+      // Обе ветки провала: уровень окончен, обновлять нечего - экран
+      // уже показывает свой оверлей. Раньше timeUp в этом switch не
+      // было вовсе, и Dart 3 отказывался компилировать файл: switch
+      // по enum обязан разбирать все значения.
       case GamePhase.crashed:
-        break;
       case GamePhase.timeUp:
-        // TODO: Handle this case.
-        throw UnimplementedError();
+        break;
     }
 
     events.tick(dt, drawing: phase == GamePhase.drawing);
@@ -421,6 +424,10 @@ class AirportGame extends FlameGame {
   // --------------------------------------------------------------- команды
 
   void undo() {
+    // Кнопки живут в Flutter и не знают про фазу игры: без этой
+    // проверки «Отмена» срабатывала бы и после взлёта - маршрут под
+    // летящим бортом менялся бы прямо в воздухе.
+    if (phase != GamePhase.drawing) return;
     if (!routes.canUndo) return;
     usedUndo = true;
     routes.undo();
@@ -434,6 +441,7 @@ class AirportGame extends FlameGame {
   /// Мешающие чужие трассы при этом снимаются - иначе подсказка
   /// могла бы оказаться невыполнимой.
   bool applyHint() {
+    if (phase != GamePhase.drawing) return false;
     for (final PlaneSpec spec in level.planes) {
       if (routes.isComplete(spec.id)) continue;
       routes.applySolution(spec);
@@ -464,6 +472,9 @@ class AirportGame extends FlameGame {
     _celebration = 0;
     _completionReported = false;
     firstArrivedPlaneId = null;
+    // Ивенты тоже начинаются заново: без сброса повторный заход шёл
+    // с уже «разыгранным» событием и выглядел иначе, чем первый.
+    events.reset();
     _syncHud();
   }
 
