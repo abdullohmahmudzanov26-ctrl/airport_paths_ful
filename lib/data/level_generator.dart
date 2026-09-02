@@ -52,7 +52,8 @@ class LevelGenerator {
     required int seed,
   }) {
     for (int attempt = 0; attempt < 16; attempt++) {
-      final LevelData? level = _tryGenerate(id, difficultyLevel, seed, attempt);
+      final LevelData? level =
+          _tryGenerate(id, difficultyLevel, seed, attempt);
       if (level != null) return level;
     }
     return _fallback(id);
@@ -65,26 +66,16 @@ class LevelGenerator {
     // мимо решения тяжело.
     if (id <= 2) {
       return _Difficulty(
-        cols: 5,
-        rows: 7,
-        planes: 1,
-        obstacles: 2 + id,
-        minPath: 4,
-        maxPath: 8,
-        fill: 0,
+        cols: 5, rows: 7, planes: 1,
+        obstacles: 2 + id, minPath: 4, maxPath: 8, fill: 0,
       );
     }
     // 3 - мостик: второй борт и первое пересечение маршрутов, но
     // карта ещё маленькая - здесь учат правилу, а не проверяют его.
     if (id == 3) {
       return const _Difficulty(
-        cols: 6,
-        rows: 8,
-        planes: 2,
-        obstacles: 4,
-        minPath: 5,
-        maxPath: 9,
-        fill: 0.25,
+        cols: 6, rows: 8, planes: 2,
+        obstacles: 4, minPath: 5, maxPath: 9, fill: 0.25,
       );
     }
     // ОБРЫВ ПО ПРОСЬБЕ ИГРОКА: с четвёртого уровня карта резко
@@ -95,57 +86,32 @@ class LevelGenerator {
     // другую игру, а не постепенное нарастание.
     if (id <= 8) {
       return _Difficulty(
-        cols: 9,
-        rows: 12,
-        planes: 4,
-        obstacles: 8 + (id - 4),
-        minPath: 7,
-        maxPath: 16,
-        fill: 0.75,
+        cols: 9, rows: 12, planes: 4,
+        obstacles: 8 + (id - 4), minPath: 7, maxPath: 16, fill: 0.75,
       );
     }
     if (id <= 20) {
       return _Difficulty(
-        cols: 9,
-        rows: 13,
-        planes: 5,
-        obstacles: 10 + (id - 9) ~/ 2,
-        minPath: 7,
-        maxPath: 17,
-        fill: 0.80,
+        cols: 9, rows: 13, planes: 5,
+        obstacles: 10 + (id - 9) ~/ 2, minPath: 7, maxPath: 17, fill: 0.80,
       );
     }
     if (id <= 40) {
       return _Difficulty(
-        cols: 9,
-        rows: 14,
-        planes: id <= 30 ? 5 : 6,
-        obstacles: 11 + (id - 21) ~/ 3,
-        minPath: 8,
-        maxPath: 18,
-        fill: 0.84,
+        cols: 9, rows: 14, planes: id <= 30 ? 5 : 6,
+        obstacles: 11 + (id - 21) ~/ 3, minPath: 8, maxPath: 18, fill: 0.84,
       );
     }
     if (id <= 70) {
       return _Difficulty(
-        cols: 10,
-        rows: 14,
-        planes: id <= 55 ? 6 : 7,
-        obstacles: 12 + (id - 41) ~/ 4,
-        minPath: 8,
-        maxPath: 19,
-        fill: 0.87,
+        cols: 10, rows: 14, planes: id <= 55 ? 6 : 7,
+        obstacles: 12 + (id - 41) ~/ 4, minPath: 8, maxPath: 19, fill: 0.87,
       );
     }
     if (id <= 100) {
       return _Difficulty(
-        cols: 10,
-        rows: 15,
-        planes: id <= 85 ? 7 : 8,
-        obstacles: 13 + (id - 71) ~/ 5,
-        minPath: 8,
-        maxPath: 20,
-        fill: 0.89,
+        cols: 10, rows: 15, planes: id <= 85 ? 7 : 8,
+        obstacles: 13 + (id - 71) ~/ 5, minPath: 8, maxPath: 20, fill: 0.89,
       );
     }
     // EVENT-зона 151-200: до 13 бортов, самые крупные поля в игре.
@@ -153,79 +119,44 @@ class LevelGenerator {
     // трассы не остаётся, и генератор начинал терять самолёты.
     if (id > 195) {
       return _Difficulty(
-        cols: 11,
-        rows: 17,
-        planes: 13,
-        obstacles: 10 + (id - 196) ~/ 2,
-        minPath: 7,
-        maxPath: 23,
-        fill: 0.95,
+        cols: 11, rows: 17, planes: 13,
+        obstacles: 10 + (id - 196) ~/ 2, minPath: 7, maxPath: 23, fill: 0.95,
       );
     }
     if (id > 186) {
       return _Difficulty(
-        cols: 11,
-        rows: 17,
-        planes: 12,
-        obstacles: 10 + (id - 187) ~/ 4,
-        minPath: 7,
-        maxPath: 22,
-        fill: 0.94,
+        cols: 11, rows: 17, planes: 12,
+        obstacles: 10 + (id - 187) ~/ 4, minPath: 7, maxPath: 22, fill: 0.94,
       );
     }
     if (id > 174) {
       return _Difficulty(
-        cols: 11,
-        rows: 16,
-        planes: 11,
-        obstacles: 10 + (id - 175) ~/ 4,
-        minPath: 7,
-        maxPath: 21,
-        fill: 0.94,
+        cols: 11, rows: 16, planes: 11,
+        obstacles: 10 + (id - 175) ~/ 4, minPath: 7, maxPath: 21, fill: 0.94,
       );
     }
     if (id > 162) {
       return _Difficulty(
-        cols: 10,
-        rows: 16,
-        planes: 10,
-        obstacles: 9 + (id - 163) ~/ 4,
-        minPath: 7,
-        maxPath: 21,
-        fill: 0.93,
+        cols: 10, rows: 16, planes: 10,
+        obstacles: 9 + (id - 163) ~/ 4, minPath: 7, maxPath: 21, fill: 0.93,
       );
     }
     if (id > 150) {
       return _Difficulty(
-        cols: 10,
-        rows: 15,
-        planes: 9,
-        obstacles: 9 + (id - 151) ~/ 4,
-        minPath: 7,
-        maxPath: 20,
-        fill: 0.92,
+        cols: 10, rows: 15, planes: 9,
+        obstacles: 9 + (id - 151) ~/ 4, minPath: 7, maxPath: 20, fill: 0.92,
       );
     }
     // Орбитальная зона: 101-150, самое плотное поле в игре.
     if (id <= 125) {
       return _Difficulty(
-        cols: 9,
-        rows: 13,
-        planes: 7,
-        obstacles: 8 + (id - 101) ~/ 5,
-        minPath: 8,
-        maxPath: 18,
-        fill: 0.90,
+        cols: 9, rows: 13, planes: 7,
+        obstacles: 8 + (id - 101) ~/ 5, minPath: 8, maxPath: 18, fill: 0.90,
       );
     }
     return _Difficulty(
-      cols: 9,
-      rows: 14,
-      planes: 8,
-      obstacles: 8 + (id - 126) ~/ 5,
-      minPath: 8,
-      maxPath: 19,
-      fill: 0.92,
+      cols: 9, rows: 14, planes: 8,
+      obstacles: 8 + (id - 126) ~/ 5, minPath: 8, maxPath: 19, fill: 0.92,
     );
   }
 
@@ -253,7 +184,8 @@ class LevelGenerator {
         List<TileType>.filled(d.cols * d.rows, TileType.taxiway);
     _placeObstacles(rnd, tiles, d.cols, d.rows, obstacles);
 
-    final int freeCells = tiles.where((TileType t) => t.isWalkable).length;
+    final int freeCells =
+        tiles.where((TileType t) => t.isWalkable).length;
     if (freeCells < planeCount * d.minPath + 4) return null;
 
     final List<List<GridPos>>? paths = _carvePaths(

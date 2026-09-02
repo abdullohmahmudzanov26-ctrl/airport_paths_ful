@@ -1,7 +1,7 @@
 import 'package:flutter/material.dart';
 
-import '../services/audio_service.dart';
 import '../services/service_locator.dart';
+import '../services/audio_service.dart';
 import '../theme/app_palette.dart';
 import '../theme/app_text_styles.dart';
 
@@ -113,14 +113,12 @@ class _GameButtonState extends State<GameButton>
               final double t = _press.value;
               final double drop = widget.depth * t;
               return Padding(
-                padding:
-                    EdgeInsets.only(top: drop, bottom: widget.depth - drop),
+                padding: EdgeInsets.only(top: drop, bottom: widget.depth - drop),
                 child: DecoratedBox(
                   decoration: BoxDecoration(
                     borderRadius: BorderRadius.circular(widget.radius),
                     gradient: c.gradient,
-                    border: Border.all(
-                        color: c.border.withValues(alpha: 0.55), width: 1.4),
+                    border: Border.all(color: c.border.withOpacity(0.55), width: 1.4),
                     boxShadow: <BoxShadow>[
                       // Торец: даёт объём.
                       BoxShadow(
@@ -129,8 +127,7 @@ class _GameButtonState extends State<GameButton>
                       ),
                       // Мягкая тень на фон.
                       BoxShadow(
-                        color: Colors.black
-                            .withValues(alpha: 0.28 * (1 - t * 0.6)),
+                        color: Colors.black.withOpacity(0.28 * (1 - t * 0.6)),
                         offset: Offset(0, widget.depth - drop + 3),
                         blurRadius: 10,
                       ),
@@ -191,8 +188,8 @@ class _ButtonFace extends StatelessWidget {
                       begin: Alignment.topCenter,
                       end: Alignment.bottomCenter,
                       colors: <Color>[
-                        Colors.white.withValues(alpha: 0.26),
-                        Colors.white.withValues(alpha: 0.0),
+                        Colors.white.withOpacity(0.26),
+                        Colors.white.withOpacity(0.0),
                       ],
                     ),
                   ),
@@ -208,8 +205,7 @@ class _ButtonFace extends StatelessWidget {
               mainAxisSize: MainAxisSize.min,
               children: <Widget>[
                 if (icon != null) ...<Widget>[
-                  Icon(icon,
-                      size: (style.fontSize ?? 16) + 5, color: iconColor),
+                  Icon(icon, size: (style.fontSize ?? 16) + 5, color: iconColor),
                   // Отступ нужен только между иконкой и текстом. У
                   // кнопки без подписи (например, замок вместо цены на
                   // выключенном донате) он сдвигал бы иконку от центра.
@@ -262,11 +258,9 @@ class _Badge extends StatelessWidget {
           end: Alignment.bottomCenter,
           colors: <Color>[Color(0xFFFF6B5B), Color(0xFFD32F2F)],
         ),
-        border:
-            Border.all(color: Colors.white.withValues(alpha: 0.75), width: 1.5),
+        border: Border.all(color: Colors.white.withOpacity(0.75), width: 1.5),
         boxShadow: const <BoxShadow>[
-          BoxShadow(
-              color: Color(0x66000000), offset: Offset(0, 2), blurRadius: 4),
+          BoxShadow(color: Color(0x66000000), offset: Offset(0, 2), blurRadius: 4),
         ],
       ),
       child: Text(

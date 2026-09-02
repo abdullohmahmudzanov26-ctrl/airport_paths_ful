@@ -10,36 +10,35 @@ dependencies:
   flutter:
     sdk: flutter
 
-  # Игровой движок
-  flame: ^1.18.0
+  # Игровой движок (поле, самолёты, маршруты) - Этап 3+
+  # Поднято до ^1.38.0 - это минимальная версия flame, требуемая
+  # flame_3d 0.3.0 (см. ниже). Более старая ^1.18.0 не совместима.
+  flame: ^1.38.0
+
+  # Нативный 3D-рендер для экрана "Мой аэропорт" (без WebView) - см.
+  # lib/game3d/airport_view_game.dart и lib/screens/my_airport_screen.dart.
+  #
+  # Экспериментальный пакет: не гарантирует semver, API может ломаться
+  # между версиями, требует Flutter GPU (Impeller). Официально
+  # поддерживается на Android/iOS/macOS - Windows/Linux не поддержаны,
+  # Web помечен как экспериментальный поверх экспериментального.
+  # Раз таргет - только App Store (iOS), это не проблема.
+  #
+  # ВАЖНО: на iOS нужно явно включить Flutter GPU - см. инструкцию
+  # к ios/Runner/Info.plist в README/чате, либо запускать через
+  # `flutter run --enable-flutter-gpu` на время разработки.
+  flame_3d: ^0.3.0
 
   # Сохранение прогресса и настроек
   shared_preferences: ^2.2.3
 
-  # Музыка и звуковые эффекты
+  # Музыка и звуковые эффекты - Этап 6
   audioplayers: ^6.1.0
 
 dev_dependencies:
   flutter_test:
     sdk: flutter
-
   flutter_lints: ^4.0.0
-
-  # Генератор иконки приложения
-  flutter_launcher_icons: ^0.14.4
-
-# ==========================================
-# ИКОНКА ПРИЛОЖЕНИЯ
-# ==========================================
-
-flutter_launcher_icons:
-  android: true
-  ios: true
-  image_path: "assets/images/app_icon.jpg"
-
-# ==========================================
-# FLUTTER
-# ==========================================
 
 flutter:
   uses-material-design: true
@@ -47,9 +46,27 @@ flutter:
   assets:
     - assets/audio/sfx/
     - assets/audio/music/
-    - assets/images/app_icon.jpg
+    # Модели "Мой аэропорт": по 26 файлов (уровни 0-25) на тему.
+    # Flutter не подхватывает вложенные папки одной записью, поэтому
+    # ниже - явный список: см. tool/gen_airport_models.py, который
+    # их считает, и держи список в синхроне, если добавишь тему.
+    - assets/models3d/aurora/
+    - assets/models3d/blueprint/
+    - assets/models3d/classic/
+    - assets/models3d/desert/
+    - assets/models3d/dubai/
+    - assets/models3d/london/
+    - assets/models3d/newyork/
+    - assets/models3d/night/
+    - assets/models3d/orbital/
+    - assets/models3d/singapore/
+    - assets/models3d/sunrise/
+    - assets/models3d/tokyo/
+    - assets/models3d/tropic/
+    - assets/models3d/volcanic/
+    - assets/models3d/winter/
 
-  # Когда добавишь свой шрифт:
+  # Когда добавишь свой шрифт - раскомментируй и положи файлы в assets/fonts/
   # fonts:
   #   - family: AirportDisplay
   #     fonts:

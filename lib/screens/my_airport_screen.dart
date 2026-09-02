@@ -3,6 +3,9 @@
 import 'dart:async';
 import 'dart:math' as math;
 
+import 'package:airport_paths/game/airport_view_game.dart';
+import 'package:flame/game.dart' show GameWidget;
+import 'package:flutter/gestures.dart' show PointerDeviceKind;
 import 'package:flutter/material.dart';
 
 import '../data/airport_evolution.dart';
@@ -379,14 +382,17 @@ class _AirportFullscreenPage extends StatelessWidget {
             return Stack(
               children: <Widget>[
                 Center(
-                  child: InteractiveViewer(
-                    minScale: 1,
-                    maxScale: 5,
-                    child: SizedBox(
-                      width: w,
-                      height: h,
-                      child: _AirportView(level: level),
-                    ),
+                  // Раньше карту оборачивал InteractiveViewer - у
+                  // плоского рисунка это был единственный способ
+                  // покрутить/приблизить сцену. Модель уже умеет то
+                  // же самое сама (перетаскивание вращает и
+                  // наклоняет камеру, щипок - зум): второй слой
+                  // жестов поверх первого работал бы вслепую, споря
+                  // с ModelViewer за одни и те же прикосновения.
+                  child: SizedBox(
+                    width: w,
+                    height: h,
+                    child: _AirportView(level: level),
                   ),
                 ),
                 Positioned(
@@ -804,63 +810,109 @@ class _FlowArrow extends StatelessWidget {
   }
 }
 
-/// Изометрическая карта аэропорта.
+/// Настоящая 3D-карта аэропорта.
 ///
-/// Рисует ровно те объекты, что есть в AirportEvolution.plan для
-/// текущего уровня, поэтому каждое улучшение физически появляется на
-/// карте. Свежепостроенное всплывает короткой анимацией.
+/// Раньше это была изометрическая проекция, нарисованная кодом на
+/// Canvas (_AirportPainter, ~400 строк) - плоские фигуры с
+/// нарисованными вручную гранями, имитирующими объём. Потом был
+/// промежуточный вариант через ModelViewer (<model-viewer> в WebView) -
+/// он подтормаживал стартом WebView и на Android спотыкался об
+/// ERR_CLEARTEXT_NOT_PERMITTED (WebView против http:// локального
+/// сервера, который плагин поднимает сам). Раз сборка идёт только под
+/// App Store (iOS), эта конкретная проблема не актуальна, но и WebView
+/// как таковой всё равно лишний слой поверх нативного рендера.
+///
+/// Теперь это flame_3d (см. lib/game3d/airport_view_game.dart) -
+/// настоящая полигональная геометрия рисуется через Flutter GPU
+/// напрямую, без WebView. Файл на тему и уровень выбран заранее - план
+/// застройки детерминирован (AirportEvolution.plan, 25 шагов без
+/// случайности), поэтому все 25 стадий для каждой из 15 тем посчитаны
+/// один раз офлайн, а не собираются на телефоне игрока в рантайме.
+///
+/// О рисках: flame_3d официально помечен как experimental (пакет сам
+/// предупреждает - "please do not use this for production"), API может
+/// ломаться между минорными версиями без semver. Держим версию
+/// прибитой (flame_3d: ^0.3.0 в pubspec.yaml), а не "latest", именно
+/// поэтому.
 class _AirportView extends StatefulWidget {
   const _AirportView({required this.level});
 
   final int level;
 
+  /// Путь к предпосчитанной модели для (тема, уровень). Наружная
+  /// граница level всегда 0..25 - см. AirportEvolution.maxLevel,
+  /// но clamp оставлен как страховка: список тем и план застройки
+  /// генерируются офлайн одним скриптом и в теории могут разойтись
+  /// с уже сохранённым прогрессом игрока на диске.
+  static String assetFor(String themeId, int level) {
+    final int stage = level.clamp(0, AirportEvolution.plan.length);
+    return 'assets/models3d/$themeId/stage_${stage.toString().padLeft(2, '0')}.glb';
+  }
+
   @override
   State<_AirportView> createState() => _AirportViewState();
 }
 
-class _AirportViewState extends State<_AirportView>
-    with SingleTickerProviderStateMixin {
-  late final AnimationController _build = AnimationController(
-    vsync: this,
-    duration: const Duration(milliseconds: 900),
-    value: 1,
-  );
+class _AirportViewState extends State<_AirportView> {
+  // Игра живёт с виджетом, а не пересоздаётся на каждый build - иначе
+  // при каждой перерисовке карточки (например, тик обратного отсчёта
+  // дохода раз в секунду в _MyAirportScreenState) сцена грузилась бы
+  // заново и мигала пустым кадром.
+  late AirportViewGame _game;
+  String? _lastAssetPath;
 
   @override
-  void didUpdateWidget(covariant _AirportView old) {
-    super.didUpdateWidget(old);
-    // Уровень вырос - проигрываем стройку последнего объекта.
-    if (widget.level > old.level) _build.forward(from: 0);
+  void initState() {
+    super.initState();
+    _game = AirportViewGame(initialModelPath: _currentAssetPath());
+    _lastAssetPath = _currentAssetPath();
+  }
+
+  @override
+  void didUpdateWidget(covariant _AirportView oldWidget) {
+    super.didUpdateWidget(oldWidget);
+    _syncModel();
+  }
+
+  String _currentAssetPath() {
+    final BoardTheme theme = BoardThemes.byId(Services.progress.equippedTheme);
+    return _AirportView.assetFor(theme.id, widget.level);
+  }
+
+  /// Апгрейд уровня или смена темы в магазине - оба меняют путь к
+  /// модели. build() экрана вызывается заново (ValueListenableBuilder/
+  /// AnimatedBuilder на Services.progress), но сам _AirportView не
+  /// теряет State - значит нужно явно перепроверить путь и, если он
+  /// изменился, попросить игру подгрузить новую модель.
+  void _syncModel() {
+    final String next = _currentAssetPath();
+    if (next == _lastAssetPath) return;
+    _lastAssetPath = next;
+    _game.loadModel(next);
   }
 
   @override
   void dispose() {
-    _build.dispose();
+    _game.onRemove();
     super.dispose();
   }
 
   @override
   Widget build(BuildContext context) {
+    _syncModel();
     final BoardTheme theme = BoardThemes.byId(Services.progress.equippedTheme);
+    final bool isNight =
+        theme.style == BoardStyle.night || theme.style == BoardStyle.orbital;
 
     return RepaintBoundary(
       child: ClipRRect(
         borderRadius: BorderRadius.circular(18),
         child: AspectRatio(
           aspectRatio: 1.25,
-          child: AnimatedBuilder(
-            animation: _build,
-            builder: (BuildContext context, _) => CustomPaint(
-              painter: _AirportPainter(
-                level: widget.level,
-                theme: theme,
-                reveal: Curves.easeOutBack.transform(
-                  _build.value.clamp(0.0, 1.0),
-                ),
-              ),
-              isComplex: true,
-              willChange: _build.isAnimating,
-            ),
+          child: _AirportSky(
+            theme: theme,
+            isNight: isNight,
+            child: _AirportGestureLayer(game: _game),
           ),
         ),
       ),
@@ -868,399 +920,152 @@ class _AirportViewState extends State<_AirportView>
   }
 }
 
-class _AirportPainter extends CustomPainter {
-  const _AirportPainter({
-    required this.level,
-    required this.theme,
-    required this.reveal,
-  });
+/// Драг = поворот+наклон камеры, щипок = зум - раньше это разбирал сам
+/// <model-viewer>, здесь ровно то же самое, но руками через
+/// GestureDetector.onScaleUpdate (он даёт и смещение фокуса, и
+/// масштаб, поэтому одним колбэком покрыты и одно-, и двупальцевый
+/// жест - отдельный onPanUpdate не нужен и только спорил бы за те же
+/// касания).
+class _AirportGestureLayer extends StatefulWidget {
+  const _AirportGestureLayer({required this.game});
 
-  final int level;
-  final BoardTheme theme;
-  final double reveal;
-
-  static const int _grid = 9;
+  final AirportViewGame game;
 
   @override
-  void paint(Canvas canvas, Size size) {
-    final Rect all = Offset.zero & size;
-    final bool isNight =
-        theme.style == BoardStyle.night || theme.style == BoardStyle.orbital;
+  State<_AirportGestureLayer> createState() => _AirportGestureLayerState();
+}
 
-    // Небо над полем - глубина сцены.
-    canvas.drawRect(
-      all,
-      Paint()
-        ..shader = LinearGradient(
+class _AirportGestureLayerState extends State<_AirportGestureLayer> {
+  /// Радиан на логический пиксель - подобрано на глаз под тот же темп
+  /// вращения, что был у model-viewer при обычном драге пальцем.
+  static const double _radiansPerPixel = 0.010;
+
+  Offset? _lastFocalPoint;
+  double _lastScale = 1.0;
+
+  void _onScaleStart(ScaleStartDetails details) {
+    _lastFocalPoint = details.focalPoint;
+    _lastScale = 1.0;
+  }
+
+  void _onScaleUpdate(ScaleUpdateDetails details) {
+    final Offset last = _lastFocalPoint ?? details.focalPoint;
+    final Offset delta = details.focalPoint - last;
+    _lastFocalPoint = details.focalPoint;
+
+    if (delta != Offset.zero) {
+      widget.game.orbit(
+        -delta.dx * _radiansPerPixel,
+        -delta.dy * _radiansPerPixel,
+      );
+    }
+
+    if (details.scale != 1.0) {
+      final double stepScale = details.scale / _lastScale;
+      if (stepScale != 1.0) widget.game.zoomBy(stepScale);
+      _lastScale = details.scale;
+    }
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return GestureDetector(
+      behavior: HitTestBehavior.opaque,
+      supportedDevices: const <PointerDeviceKind>{
+        PointerDeviceKind.touch,
+        PointerDeviceKind.mouse,
+        PointerDeviceKind.trackpad,
+      },
+      onScaleStart: _onScaleStart,
+      onScaleUpdate: _onScaleUpdate,
+      child: GameWidget(game: widget.game),
+    );
+  }
+}
+
+/// Небо и атмосфера за 3D-моделью - то, что раньше рисовал верхний
+/// слой _AirportPainter (градиент, световое пятно, звёзды на
+/// ночных/орбитальных темах). ModelViewer сам не рисует фон сцены -
+/// у него под 3D-моделью прозрачный backgroundColor, поэтому эту
+/// атмосферу нужно оставить отдельным слоем позади него, иначе
+/// карточка на светлых темах становится куском белого WebView.
+class _AirportSky extends StatelessWidget {
+  const _AirportSky({
+    required this.theme,
+    required this.isNight,
+    required this.child,
+  });
+
+  final BoardTheme theme;
+  final bool isNight;
+  final Widget child;
+
+  static Color _mix(Color a, Color b, double t) => Color.lerp(a, b, t) ?? a;
+
+  @override
+  Widget build(BuildContext context) {
+    return DecoratedBox(
+      decoration: BoxDecoration(
+        gradient: LinearGradient(
           begin: Alignment.topCenter,
           end: Alignment.bottomCenter,
           colors: <Color>[
             _mix(theme.groundTop, const Color(0xFF0D2340), 0.55),
             _mix(theme.groundBottom, const Color(0xFF06111F), 0.35),
           ],
-        ).createShader(all),
-    );
-
-    // Мягкое световое пятно в верхней части неба - без него градиент
-    // выглядит плоской заливкой, а не сценой с источником света.
-    canvas.drawRect(
-      all,
-      Paint()
-        ..shader = RadialGradient(
-          center: const Alignment(-0.35, -0.85),
-          radius: 0.9,
-          colors: <Color>[
-            (isNight ? theme.beacon : theme.glass).withValues(alpha: 0.16),
-            Colors.transparent,
-          ],
-        ).createShader(all),
-    );
-
-    // Звёзды - только у ночных/орбитальных тем, фиксированный сид,
-    // чтобы не мерцали при каждой перерисовке во время анимации стройки.
-    if (isNight) {
-      final math.Random starRnd = math.Random(2024);
-      final Paint star = Paint()..color = Colors.white.withValues(alpha: 0.7);
-      for (int i = 0; i < 26; i++) {
-        final Offset p = Offset(
-          starRnd.nextDouble() * size.width,
-          starRnd.nextDouble() * size.height * 0.5,
-        );
-        canvas.drawCircle(p, starRnd.nextDouble() * 1.1 + 0.3, star);
-      }
-    }
-
-    final double tile = size.width / (_grid + 1.2);
-    final Offset origin = Offset(size.width / 2, size.height * 0.26);
-
-    _paintGround(canvas, tile, origin, isNight);
-
-    // Объекты рисуются в порядке удаления от камеры, иначе дальние
-    // постройки перекрывают ближние.
-    final List<_Placed> placed = <_Placed>[];
-    for (int i = 1; i <= level && i <= AirportEvolution.plan.length; i++) {
-      final AirportBuilding b = AirportEvolution.plan[i - 1];
-      placed.add(_Placed(b, i == level ? reveal : 1.0));
-    }
-    placed.sort((a, b) => (a.b.gx + a.b.gy).compareTo(b.b.gx + b.b.gy));
-    for (final _Placed p in placed) {
-      _paintPart(canvas, tile, origin, p.b, p.grow);
-    }
-
-    // Лёгкое виньетирование по краям - взгляд собирается к центру сцены,
-    // как в отрисовке основного игрового поля.
-    canvas.drawRect(
-      all,
-      Paint()
-        ..shader = RadialGradient(
-          center: Alignment.center,
-          radius: 0.95,
-          colors: <Color>[
-            Colors.transparent,
-            Colors.black.withValues(alpha: 0.22)
-          ],
-          stops: const <double>[0.72, 1.0],
-        ).createShader(all),
-    );
-  }
-
-  Offset _iso(double gx, double gy, double h, double tile, Offset o) => Offset(
-        o.dx + (gx - gy) * tile * 0.5,
-        o.dy + (gx + gy) * tile * 0.25 - h * tile * 0.5,
-      );
-
-  void _paintGround(Canvas canvas, double tile, Offset o, bool isNight) {
-    final Paint grass = Paint()..color = theme.grass;
-    final Paint grassAlt = Paint()
-      ..color = _mix(theme.grass, theme.grassDot, 0.45);
-    final Paint dot = Paint()..color = theme.grassDot.withValues(alpha: 0.55);
-    final Paint edge = Paint()
-      ..style = PaintingStyle.stroke
-      ..strokeWidth = 1
-      ..color = theme.groundPatch;
-
-    // Фиксированный сид - текстура травы не "мерцает" на каждый кадр
-    // анимации стройки, узор один и тот же между перерисовками.
-    final math.Random rnd = math.Random(1337);
-
-    for (int x = 0; x < _grid; x++) {
-      for (int y = 0; y < _grid; y++) {
-        final Path d = Path()
-          ..moveTo(_iso(x + 0.0, y + 0.0, 0, tile, o).dx,
-              _iso(x + 0.0, y + 0.0, 0, tile, o).dy)
-          ..lineTo(_iso(x + 1.0, y + 0.0, 0, tile, o).dx,
-              _iso(x + 1.0, y + 0.0, 0, tile, o).dy)
-          ..lineTo(_iso(x + 1.0, y + 1.0, 0, tile, o).dx,
-              _iso(x + 1.0, y + 1.0, 0, tile, o).dy)
-          ..lineTo(_iso(x + 0.0, y + 1.0, 0, tile, o).dx,
-              _iso(x + 0.0, y + 1.0, 0, tile, o).dy)
-          ..close();
-        // Лёгкое чередование двух оттенков травы вместо плоской заливки -
-        // тот же приём шахматки, что читается на основном игровом поле.
-        canvas.drawPath(d, (x + y).isEven ? grass : grassAlt);
-        canvas.drawPath(d, edge);
-        if (rnd.nextDouble() < 0.4) {
-          final Offset center = _iso(
-            x + 0.3 + rnd.nextDouble() * 0.4,
-            y + 0.3 + rnd.nextDouble() * 0.4,
-            0,
-            tile,
-            o,
-          );
-          canvas.drawCircle(center, tile * 0.035, dot);
-        }
-      }
-    }
-
-    // Главная ВПП есть с самого начала - иначе это не аэропорт.
-    // Контактная тень под полосой отрывает её от травы точно так же,
-    // как тень под каждой постройкой ниже в _box.
-    final Path stripShadow = Path()
-      ..moveTo(_iso(0, 8, 0, tile, o).dx, _iso(0, 8, 0, tile, o).dy)
-      ..lineTo(_iso(9, 8, 0, tile, o).dx, _iso(9, 8, 0, tile, o).dy)
-      ..lineTo(_iso(9, 9, 0, tile, o).dx + tile * 0.1,
-          _iso(9, 9, 0, tile, o).dy + tile * 0.1)
-      ..lineTo(_iso(0, 9, 0, tile, o).dx + tile * 0.1,
-          _iso(0, 9, 0, tile, o).dy + tile * 0.1)
-      ..close();
-    canvas.drawPath(
-      stripShadow,
-      Paint()
-        ..color = Colors.black.withValues(alpha: 0.16)
-        ..maskFilter = const MaskFilter.blur(BlurStyle.normal, 4),
-    );
-
-    _paintStrip(canvas, tile, o, 0, 8, 9, 1, theme.asphalt);
-    // Светлая осевая полоса поверх покрытия - без неё широкая ВПП
-    // читается тем же плоским цветом, что и обычные рулёжки.
-    final Paint axis = Paint()
-      ..color = theme.asphaltLight.withValues(alpha: 0.5)
-      ..strokeWidth = math.max(0.8, tile * 0.025);
-    canvas.drawLine(
-      _iso(0.1, 8.5, 0.01, tile, o),
-      _iso(8.9, 8.5, 0.01, tile, o),
-      axis,
-    );
-    final Paint mark = Paint()
-      ..color = theme.marking
-      ..strokeWidth = math.max(1.2, tile * 0.06)
-      ..strokeCap = StrokeCap.round
-      ..maskFilter =
-          isNight ? const MaskFilter.blur(BlurStyle.normal, 1.4) : null;
-    for (int i = 0; i < 8; i++) {
-      final Offset a = _iso(i + 0.35, 8.5, 0, tile, o);
-      final Offset b = _iso(i + 0.75, 8.5, 0, tile, o);
-      canvas.drawLine(a, b, mark);
-    }
-  }
-
-  void _paintStrip(Canvas canvas, double tile, Offset o, double gx, double gy,
-      double w, double h, Color color) {
-    final Path p = Path()
-      ..moveTo(_iso(gx, gy, 0, tile, o).dx, _iso(gx, gy, 0, tile, o).dy)
-      ..lineTo(_iso(gx + w, gy, 0, tile, o).dx, _iso(gx + w, gy, 0, tile, o).dy)
-      ..lineTo(_iso(gx + w, gy + h, 0, tile, o).dx,
-          _iso(gx + w, gy + h, 0, tile, o).dy)
-      ..lineTo(_iso(gx, gy + h, 0, tile, o).dx, _iso(gx, gy + h, 0, tile, o).dy)
-      ..close();
-    canvas.drawPath(p, Paint()..color = color);
-  }
-
-  /// Коробка в изометрии: верхняя грань плюс две боковые.
-  ///
-  /// Добавлены три вещи, которых не было в первой версии отрисовки:
-  /// мягкая контактная тень на земле (иначе объём выглядит приклеенным
-  /// к подложке), лёгкий градиент на верхней и правой грани (свет
-  /// сверху-слева) и тонкий контур по силуэту, чтобы постройка не
-  /// сливалась с фоном на светлых темах.
-  void _box(Canvas canvas, double tile, Offset o, double gx, double gy,
-      double w, double d, double h, Color top, Color left, Color right) {
-    if (h <= 0.002) return;
-
-    final Offset shadowCenter = _iso(gx + w / 2, gy + d / 2, 0, tile, o);
-    canvas.drawOval(
-      Rect.fromCenter(
-        center: shadowCenter + Offset(0, tile * d * 0.10),
-        width: tile * w * 1.18,
-        height: tile * d * 0.62,
+        ),
       ),
-      Paint()
-        ..color = Colors.black.withValues(alpha: 0.24)
-        ..maskFilter = const MaskFilter.blur(BlurStyle.normal, 3),
+      child: Stack(
+        fit: StackFit.expand,
+        children: <Widget>[
+          DecoratedBox(
+            decoration: BoxDecoration(
+              gradient: RadialGradient(
+                center: const Alignment(-0.35, -0.85),
+                radius: 0.9,
+                colors: <Color>[
+                  (isNight ? theme.beacon : theme.glass)
+                      .withValues(alpha: 0.16),
+                  Colors.transparent,
+                ],
+              ),
+            ),
+          ),
+          if (isNight) const _StarField(),
+          child,
+        ],
+      ),
     );
-
-    final Offset a = _iso(gx, gy, h, tile, o);
-    final Offset b = _iso(gx + w, gy, h, tile, o);
-    final Offset c = _iso(gx + w, gy + d, h, tile, o);
-    final Offset e = _iso(gx, gy + d, h, tile, o);
-
-    final Path topPath = Path()
-      ..moveTo(a.dx, a.dy)
-      ..lineTo(b.dx, b.dy)
-      ..lineTo(c.dx, c.dy)
-      ..lineTo(e.dx, e.dy)
-      ..close();
-    canvas.drawPath(
-      topPath,
-      Paint()
-        ..shader = LinearGradient(
-          begin: Alignment.topLeft,
-          end: Alignment.bottomRight,
-          colors: <Color>[_lighten(top, 0.28), top],
-        ).createShader(topPath.getBounds()),
-    );
-
-    final Offset e0 = _iso(gx, gy + d, 0, tile, o);
-    final Offset c0 = _iso(gx + w, gy + d, 0, tile, o);
-    final Offset b0 = _iso(gx + w, gy, 0, tile, o);
-
-    final Path leftPath = Path()
-      ..moveTo(e.dx, e.dy)
-      ..lineTo(c.dx, c.dy)
-      ..lineTo(c0.dx, c0.dy)
-      ..lineTo(e0.dx, e0.dy)
-      ..close();
-    canvas.drawPath(leftPath, Paint()..color = left);
-
-    final Path rightPath = Path()
-      ..moveTo(c.dx, c.dy)
-      ..lineTo(b.dx, b.dy)
-      ..lineTo(b0.dx, b0.dy)
-      ..lineTo(c0.dx, c0.dy)
-      ..close();
-    canvas.drawPath(
-      rightPath,
-      Paint()
-        ..shader = LinearGradient(
-          begin: Alignment.topCenter,
-          end: Alignment.bottomCenter,
-          colors: <Color>[right, _darken(right, 0.22)],
-        ).createShader(rightPath.getBounds()),
-    );
-
-    final Paint outline = Paint()
-      ..style = PaintingStyle.stroke
-      ..strokeWidth = math.max(0.6, tile * 0.012)
-      ..color = _darken(left, 0.4).withValues(alpha: 0.5);
-    canvas.drawPath(topPath, outline);
-    canvas.drawPath(leftPath, outline);
-    canvas.drawPath(rightPath, outline);
   }
-
-  void _paintPart(
-      Canvas canvas, double tile, Offset o, AirportBuilding b, double grow) {
-    if (grow <= 0.01) return;
-    final double gx = b.gx.toDouble();
-    final double gy = b.gy.toDouble();
-    final Color top = theme.structureLight;
-    final Color left = theme.structureDark;
-    final Color right = theme.structure;
-
-    switch (b.part) {
-      case AirportPart.apron:
-      case AirportPart.expand:
-        _paintStrip(canvas, tile, o, gx, gy, 2, 2, theme.asphalt);
-        break;
-
-      case AirportPart.road:
-        _paintStrip(canvas, tile, o, gx, gy, 3, 0.6, theme.asphaltLight);
-        break;
-
-      case AirportPart.runway:
-        _paintStrip(canvas, tile, o, gx, gy, 9, 0.9, theme.asphalt);
-        break;
-
-      case AirportPart.parking:
-        _paintStrip(canvas, tile, o, gx, gy, 1.6, 1.6, theme.asphaltLight);
-        for (int i = 0; i < 3; i++) {
-          _box(canvas, tile, o, gx + 0.15 + i * 0.45, gy + 0.3, 0.3, 0.6,
-              0.25 * grow, theme.glass, left, right);
-        }
-        break;
-
-      case AirportPart.stand:
-        _paintStrip(canvas, tile, o, gx, gy, 1.4, 1.4, theme.asphalt);
-        // Самолёт на стоянке - крест из двух коробок.
-        _box(canvas, tile, o, gx + 0.55, gy + 0.25, 0.25, 0.9, 0.22 * grow,
-            theme.asphaltLight, left, right);
-        _box(canvas, tile, o, gx + 0.2, gy + 0.6, 0.95, 0.22, 0.18 * grow,
-            theme.asphaltLight, left, right);
-        break;
-
-      case AirportPart.hangar:
-        _box(canvas, tile, o, gx + 0.1, gy + 0.1, 0.8, 0.8, 0.55 * grow, top,
-            left, right);
-        break;
-
-      case AirportPart.terminal:
-        _box(canvas, tile, o, gx + 0.05, gy + 0.05, 0.9, 0.9, 0.75 * grow, top,
-            left, right);
-        // Полоса остекления по фасаду.
-        _box(canvas, tile, o, gx + 0.05, gy + 0.75, 0.9, 0.2, 0.45 * grow,
-            theme.glass, theme.glass, theme.glass);
-        break;
-
-      case AirportPart.tower:
-        _box(canvas, tile, o, gx + 0.35, gy + 0.35, 0.3, 0.3, 1.5 * grow, top,
-            left, right);
-        _box(canvas, tile, o, gx + 0.2, gy + 0.2, 0.6, 0.6, 1.75 * grow,
-            theme.glass, left, right);
-        final Offset beaconCenter =
-            _iso(gx + 0.5, gy + 0.5, 1.95 * grow, tile, o);
-        // Ореол под маячком - без него это просто плоская точка, а не
-        // огонёк, который светит в темноте над башней.
-        canvas.drawCircle(
-          beaconCenter,
-          tile * 0.16,
-          Paint()
-            ..color = theme.beacon.withValues(alpha: 0.35)
-            ..maskFilter = const MaskFilter.blur(BlurStyle.normal, 5),
-        );
-        canvas.drawCircle(
-          beaconCenter,
-          tile * 0.07,
-          Paint()..color = theme.beacon,
-        );
-        break;
-
-      case AirportPart.lights:
-        // Огни вдоль главной полосы - с мягким свечением, а не просто
-        // залитой точкой, иначе на тёмных темах они теряются на фоне ВПП.
-        final Paint haze = Paint()
-          ..color = theme.beacon.withValues(alpha: 0.45)
-          ..maskFilter = const MaskFilter.blur(BlurStyle.normal, 4);
-        final Paint glow = Paint()
-          ..color = theme.beacon.withValues(alpha: 0.95);
-        for (int i = 0; i < 9; i++) {
-          final Offset p = _iso(i + 0.5, 7.85, 0.1, tile, o);
-          canvas.drawCircle(p, tile * 0.14 * grow, haze);
-          canvas.drawCircle(p, tile * 0.06 * grow, glow);
-        }
-        break;
-    }
-  }
-
-  static Color _mix(Color a, Color b, double t) => Color.fromARGB(
-        255,
-        (a.red + (b.red - a.red) * t).round(),
-        (a.green + (b.green - a.green) * t).round(),
-        (a.blue + (b.blue - a.blue) * t).round(),
-      );
-
-  static Color _lighten(Color c, double t) =>
-      _mix(c, const Color(0xFFFFFFFF), t);
-
-  static Color _darken(Color c, double t) =>
-      _mix(c, const Color(0xFF000000), t);
-
-  @override
-  bool shouldRepaint(covariant _AirportPainter old) =>
-      old.level != level || old.theme.id != theme.id || old.reveal != reveal;
 }
 
-class _Placed {
-  const _Placed(this.b, this.grow);
+/// Фиксированный узор звёзд для ночных/орбитальных тем - тот же сид,
+/// что был в исходном painter'е, чтобы рисунок неба не поменялся.
+class _StarField extends StatelessWidget {
+  const _StarField();
 
-  final AirportBuilding b;
-  final double grow;
+  @override
+  Widget build(BuildContext context) {
+    return IgnorePointer(
+      child: CustomPaint(painter: _StarFieldPainter()),
+    );
+  }
+}
+
+class _StarFieldPainter extends CustomPainter {
+  @override
+  void paint(Canvas canvas, Size size) {
+    final math.Random rnd = math.Random(2024);
+    final Paint star = Paint()..color = Colors.white.withValues(alpha: 0.7);
+    for (int i = 0; i < 26; i++) {
+      final Offset p = Offset(
+        rnd.nextDouble() * size.width,
+        rnd.nextDouble() * size.height * 0.5,
+      );
+      canvas.drawCircle(p, rnd.nextDouble() * 1.1 + 0.3, star);
+    }
+  }
+
+  @override
+  bool shouldRepaint(covariant _StarFieldPainter oldDelegate) => false;
 }

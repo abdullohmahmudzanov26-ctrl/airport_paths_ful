@@ -88,7 +88,7 @@ class LevelTiming {
   static double _tightnessFor(int levelId) {
     if (levelId <= _easyUntil) return easyTightness;
 
-    const int last = LevelRepository.levelCount;
+    final int last = LevelRepository.levelCount;
     if (last <= _easyUntil) return hardTightness;
 
     final double progress =

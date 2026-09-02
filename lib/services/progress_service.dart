@@ -6,10 +6,10 @@ import '../app/app_config.dart';
 import '../data/achievements_data.dart';
 import '../data/airport_evolution.dart';
 import '../data/board_themes.dart';
-import '../data/daily_keys.dart';
-import '../data/level_repository.dart';
-import '../data/plane_skins.dart';
 import '../data/super_milestones.dart';
+import '../data/daily_keys.dart';
+import '../data/plane_skins.dart';
+import '../data/level_repository.dart';
 import '../models/achievement.dart';
 import '../models/iap_product.dart';
 import 'storage_service.dart';
@@ -96,7 +96,8 @@ class ProgressService extends ChangeNotifier {
 
     _hintsRefillDay = _storage.getInt(StorageKeys.hintsRefillDay, 0);
     _coinsBonusDay = _storage.getInt(StorageKeys.coinsDailyBonusDay, 0);
-    _doubleRewardArmed = _storage.getBool(StorageKeys.doubleRewardArmed, false);
+    _doubleRewardArmed =
+        _storage.getBool(StorageKeys.doubleRewardArmed, false);
     await refreshDailyHints();
 
     _airportLevel = _storage
@@ -393,9 +394,8 @@ class ProgressService extends ChangeNotifier {
   /// (AirportEvolution.maxBankedTicks) счётчик просто перестаёт расти.
   int get _bankedTicks {
     if (_airportIncomeClaimedAt <= 0) return 0;
-    const int tickMs = AirportEvolution.incomeIntervalSeconds * 1000;
-    final int elapsedMs =
-        DateTime.now().millisecondsSinceEpoch - _airportIncomeClaimedAt;
+    final int tickMs = AirportEvolution.incomeIntervalSeconds * 1000;
+    final int elapsedMs = DateTime.now().millisecondsSinceEpoch - _airportIncomeClaimedAt;
     if (elapsedMs < tickMs) return 0;
     return (elapsedMs ~/ tickMs).clamp(0, AirportEvolution.maxBankedTicks);
   }
@@ -458,7 +458,7 @@ class ProgressService extends ChangeNotifier {
   int get airportIncomeSecondsLeft {
     if (!airportUnlocked || _airportLevel <= 0) return 0;
     if (_bankedTicks > 0 || airportDailyLimitReached) return 0;
-    const int tickMs = AirportEvolution.incomeIntervalSeconds * 1000;
+    final int tickMs = AirportEvolution.incomeIntervalSeconds * 1000;
     final int leftMs = tickMs - _msSinceClaim;
     return leftMs <= 0 ? 0 : (leftMs / 1000).ceil();
   }
@@ -522,7 +522,7 @@ class ProgressService extends ChangeNotifier {
     _resolveAirportDailyReset();
     final int remaining = airportDailyRemaining;
 
-    const int tickMs = AirportEvolution.incomeIntervalSeconds * 1000;
+    final int tickMs = AirportEvolution.incomeIntervalSeconds * 1000;
     _airportIncomeClaimedAt += ticks * tickMs;
     await _storage.setInt(
       StorageKeys.airportIncomeClaimedAt,
